@@ -1,27 +1,21 @@
 apiVersion: v1
-kind: Namespace
-metadata:
-  name: default
----
-apiVersion: v1
 kind: Secret
 metadata:
-  namespace: default
-  name: grafana-sa-token
+  namespace: crossplane-system
+  name: grafana-sa-token-cluster
 type: Opaque
 stringData:
   token: "glsa_xxxxxxxxxxxx"
 ---
 apiVersion: orgmapper.crossplane.io/v1alpha1
-kind: ProviderConfig
+kind: ClusterProviderConfig
 metadata:
   name: default
-  namespace: default
 spec:
   grafanaUrl: "https://grafana.example.com"
   credentials:
     source: Secret
     secretRef:
-      namespace: default
-      name: grafana-sa-token
+      namespace: crossplane-system
+      name: grafana-sa-token-cluster
       key: token

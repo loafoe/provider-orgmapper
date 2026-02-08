@@ -21,7 +21,14 @@ type ProviderCredentials struct {
 }
 
 type ProviderConfigSpec struct {
-	// Credentials required to authenticate to this provider.
+	// GrafanaURL is the base URL of the Grafana instance (e.g. "https://grafana.example.com").
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	GrafanaURL string `json:"grafanaUrl"`
+
+	// Credentials required to authenticate to the Grafana API.
+	// Use source: Secret with a secretRef for a service account token (single key)
+	// or basic auth credentials (JSON with "username" and "password" keys).
 	Credentials ProviderCredentials `json:"credentials"`
 }
 
@@ -31,7 +38,7 @@ type ProviderConfigSpec struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="AGE",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:printcolumn:name="SECRET-NAME",type="string",JSONPath=".spec.credentials.secretRef.name",priority=1
-// +kubebuilder:resource:scope=Namespaced,categories={crossplane,provider,template}
+// +kubebuilder:resource:scope=Namespaced,categories={crossplane,provider,orgmapper}
 // A ProviderConfig configures a Helm 'provider', i.e. a connection to a particular
 type ProviderConfig struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -57,7 +64,7 @@ type ProviderConfigList struct {
 // +kubebuilder:printcolumn:name="CONFIG-NAME",type="string",JSONPath=".providerConfigRef.name"
 // +kubebuilder:printcolumn:name="RESOURCE-KIND",type="string",JSONPath=".resourceRef.kind"
 // +kubebuilder:printcolumn:name="RESOURCE-NAME",type="string",JSONPath=".resourceRef.name"
-// +kubebuilder:resource:scope=Namespaced,categories={crossplane,provider,template}
+// +kubebuilder:resource:scope=Namespaced,categories={crossplane,provider,orgmapper}
 // A ProviderConfigUsage indicates that a resource is using a ProviderConfig.
 type ProviderConfigUsage struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -80,8 +87,8 @@ type ProviderConfigUsageList struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="AGE",type="date",JSONPath=".metadata.creationTimestamp"
 // +kubebuilder:printcolumn:name="SECRET-NAME",type="string",JSONPath=".spec.credentials.secretRef.name",priority=1
-// +kubebuilder:resource:scope=Cluster,categories={crossplane,provider,template}
-// A ClusterProviderConfig configures a Template provider.
+// +kubebuilder:resource:scope=Cluster,categories={crossplane,provider,orgmapper}
+// A ClusterProviderConfig configures an OrgMapper provider.
 type ClusterProviderConfig struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -106,7 +113,7 @@ type ClusterProviderConfigList struct {
 // +kubebuilder:printcolumn:name="CONFIG-NAME",type="string",JSONPath=".providerConfigRef.name"
 // +kubebuilder:printcolumn:name="RESOURCE-KIND",type="string",JSONPath=".resourceRef.kind"
 // +kubebuilder:printcolumn:name="RESOURCE-NAME",type="string",JSONPath=".resourceRef.name"
-// +kubebuilder:resource:scope=Cluster,categories={crossplane,provider,template}
+// +kubebuilder:resource:scope=Cluster,categories={crossplane,provider,orgmapper}
 // A ClusterProviderConfigUsage indicates that a resource is using a ClusterProviderConfig.
 type ClusterProviderConfigUsage struct {
 	metav1.TypeMeta   `json:",inline"`

@@ -4,18 +4,18 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: mytypes.sample.template.crossplane.io
+  name: tenants.tenant.orgmapper.crossplane.io
 spec:
-  group: sample.template.crossplane.io
+  group: tenant.orgmapper.crossplane.io
   names:
     categories:
     - crossplane
     - managed
-    - template
-    kind: MyType
-    listKind: MyTypeList
-    plural: mytypes
-    singular: mytype
+    - orgmapper
+    kind: Tenant
+    listKind: TenantList
+    plural: tenants
+    singular: tenant
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
@@ -28,13 +28,20 @@ spec:
     - jsonPath: .metadata.annotations.crossplane\.io/external-name
       name: EXTERNAL-NAME
       type: string
+    - jsonPath: .spec.forProvider.tenantId
+      name: TENANT-ID
+      type: string
+    - jsonPath: .spec.forProvider.orgId
+      name: ORG-ID
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: AGE
       type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: A MyType is an example API type.
+        description: A Tenant is a managed resource that represents a tenant in the
+          LGTM stack registry.
         properties:
           apiVersion:
             description: |-
@@ -54,15 +61,62 @@ spec:
           metadata:
             type: object
           spec:
-            description: A MyTypeSpec defines the desired state of a MyType.
+            description: A TenantSpec defines the desired state of a Tenant.
             properties:
               forProvider:
-                description: MyTypeParameters are the configurable fields of a MyType.
+                description: TenantParameters are the configurable fields of a Tenant.
                 properties:
-                  configurableField:
+                  admins:
+                    description: Admins is a list of tenant administrators (typically
+                      GitHub IDs).
+                    items:
+                      type: string
+                    type: array
+                  editorGroups:
+                    description: EditorGroups is a list of group claims that grant
+                      Editor role in this tenant's Grafana org.
+                    items:
+                      type: string
+                    type: array
+                  orgId:
+                    description: OrgID is the mapped organization identifier.
+                    minLength: 1
                     type: string
+                  retention:
+                    description: Retention defines data retention settings for each
+                      signal type.
+                    properties:
+                      logs:
+                        description: Logs retention duration (e.g. "30d", "24h", "1w").
+                        pattern: ^[0-9]+(d|h|w|m|y)$
+                        type: string
+                      metrics:
+                        description: Metrics retention duration.
+                        pattern: ^[0-9]+(d|h|w|m|y)$
+                        type: string
+                      profiles:
+                        description: Profiles retention duration.
+                        pattern: ^[0-9]+(d|h|w|m|y)$
+                        type: string
+                      traces:
+                        description: Traces retention duration.
+                        pattern: ^[0-9]+(d|h|w|m|y)$
+                        type: string
+                    type: object
+                  tenantId:
+                    description: TenantID is the unique identifier for this tenant.
+                    minLength: 1
+                    type: string
+                  viewerGroups:
+                    description: ViewerGroups is a list of group claims that grant
+                      Viewer role in this tenant's Grafana org.
+                    items:
+                      type: string
+                    type: array
                 required:
-                - configurableField
+                - orgId
+                - retention
+                - tenantId
                 type: object
               managementPolicies:
                 default:
@@ -123,17 +177,50 @@ spec:
             - forProvider
             type: object
           status:
-            description: A MyTypeStatus represents the observed state of a MyType.
+            description: A TenantStatus represents the observed state of a Tenant.
             properties:
               atProvider:
-                description: MyTypeObservation are the observable fields of a MyType.
+                description: TenantObservation are the observable fields of a Tenant.
                 properties:
-                  configurableField:
+                  admins:
+                    items:
+                      type: string
+                    type: array
+                  editorGroups:
+                    items:
+                      type: string
+                    type: array
+                  lastUpdated:
                     type: string
-                  observableField:
+                  orgId:
                     type: string
-                required:
-                - configurableField
+                  retention:
+                    description: RetentionPolicy defines data retention durations
+                      for each signal type.
+                    properties:
+                      logs:
+                        description: Logs retention duration (e.g. "30d", "24h", "1w").
+                        pattern: ^[0-9]+(d|h|w|m|y)$
+                        type: string
+                      metrics:
+                        description: Metrics retention duration.
+                        pattern: ^[0-9]+(d|h|w|m|y)$
+                        type: string
+                      profiles:
+                        description: Profiles retention duration.
+                        pattern: ^[0-9]+(d|h|w|m|y)$
+                        type: string
+                      traces:
+                        description: Traces retention duration.
+                        pattern: ^[0-9]+(d|h|w|m|y)$
+                        type: string
+                    type: object
+                  tenantId:
+                    type: string
+                  viewerGroups:
+                    items:
+                      type: string
+                    type: array
                 type: object
               conditions:
                 description: Conditions of the resource.
