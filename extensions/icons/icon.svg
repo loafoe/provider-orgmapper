@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="tenantProviderGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#304FF5;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#00D3A9;stop-opacity:1" />
+    </linearGradient>
+    
+    <color id="grafanaOrange">#F46800</color>
+  </defs>
+
+  <g transform="translate(100, 100)">
+    
+    <path d="M -40 -65 C -70 -65 -90 -45 -90 0 C -90 50 -60 80 0 80 C 45 80 80 55 80 0 C 80 -35 60 -60 35 -70" 
+          fill="none" stroke="#F46800" stroke-width="16" stroke-linecap="round" />
+
+    <g transform="translate(-5, 5)">
+        <rect x="-45" y="-45" width="90" height="90" rx="20" ry="20" fill="url(#tenantProviderGradient)" />
+        
+        <g fill="#ffffff">
+            <circle cx="0" cy="-22" r="16" />
+            <path d="M -35 35 C -35 5, -15 -2, 0 -2 C 15 -2, 35 5, 35 35 Z" />
+        </g>
+    </g>
+
+  </g>
+</svg>

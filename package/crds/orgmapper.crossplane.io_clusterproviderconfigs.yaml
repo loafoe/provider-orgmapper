@@ -4,14 +4,14 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: clusterproviderconfigs.template.crossplane.io
+  name: clusterproviderconfigs.orgmapper.crossplane.io
 spec:
-  group: template.crossplane.io
+  group: orgmapper.crossplane.io
   names:
     categories:
     - crossplane
     - provider
-    - template
+    - orgmapper
     kind: ClusterProviderConfig
     listKind: ClusterProviderConfigList
     plural: clusterproviderconfigs
@@ -29,7 +29,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: A ClusterProviderConfig configures a Template provider.
+        description: A ClusterProviderConfig configures an OrgMapper provider.
         properties:
           apiVersion:
             description: |-
@@ -51,7 +51,10 @@ spec:
           spec:
             properties:
               credentials:
-                description: Credentials required to authenticate to this provider.
+                description: |-
+                  Credentials required to authenticate to the Grafana API.
+                  Use source: Secret with a secretRef for a service account token (single key)
+                  or basic auth credentials (JSON with "username" and "password" keys).
                 properties:
                   env:
                     description: |-
@@ -106,8 +109,14 @@ spec:
                 required:
                 - source
                 type: object
+              grafanaUrl:
+                description: GrafanaURL is the base URL of the Grafana instance (e.g.
+                  "https://grafana.example.com").
+                minLength: 1
+                type: string
             required:
             - credentials
+            - grafanaUrl
             type: object
           status:
             description: A ProviderConfigStatus defines the status of a Provider.

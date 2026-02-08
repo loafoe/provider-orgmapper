@@ -1,0 +1,20 @@
+apiVersion: tenant.orgmapper.crossplane.io/v1alpha1
+kind: Tenant
+metadata:
+  name: acme-corp
+  namespace: default
+spec:
+  forProvider:
+    tenantId: acme-corp
+    orgId: "org-12345"
+    admins:
+      - github-user-1
+      - github-user-2
+    retention:
+      logs: "30d"
+      metrics: "90d"
+      traces: "14d"
+      profiles: "7d"
+  providerConfigRef:
+    name: default
+    kind: ProviderConfig
