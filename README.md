@@ -113,6 +113,43 @@ stringData:
   token: "glsa_xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 ```
 
+### Using Basic Authentication
+
+If you prefer to use a username and password (Basic Auth), create a Secret with a JSON string containing "username" and "password" fields:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: grafana-basic-auth
+  namespace: crossplane-system
+type: Opaque
+stringData:
+  credentials: |
+    {
+      "username": "admin",
+      "password": "feature-rich-password"
+    }
+```
+
+Then update your ProviderConfig to reference this secret key:
+
+```yaml
+apiVersion: orgmapper.crossplane.io/v1alpha1
+kind: ProviderConfig
+metadata:
+  name: default
+  namespace: crossplane-system
+spec:
+  grafanaUrl: "https://grafana.example.com"
+  credentials:
+    source: Secret
+    secretRef:
+      namespace: crossplane-system
+      name: grafana-basic-auth
+      key: credentials
+```
+
 ### 2. Configure the Provider
 
 Create a `ProviderConfig` to connect to your Grafana instance:
