@@ -42,12 +42,13 @@ import (
 )
 
 const (
-	errNotTenant    = "managed resource is not a Tenant custom resource"
-	errTrackPCUsage = "cannot track ProviderConfig usage"
-	errGetPC        = "cannot get ProviderConfig"
-	errGetCreds     = "cannot get credentials"
-	errNewClient    = "cannot create Grafana client"
-	errListTenants  = "cannot list Tenants"
+	errNotTenant       = "managed resource is not a Tenant custom resource"
+	errTrackPCUsage    = "cannot track ProviderConfig usage"
+	errGetPC           = "cannot get ProviderConfig"
+	errGetCreds        = "cannot get credentials"
+	errNewClient       = "cannot create Grafana client"
+	errListTenants     = "cannot list Tenants"
+	errDuplicateTenant = "tenant with this tenantId already exists"
 )
 
 // SetupGated adds a controller that reconciles Tenant managed resources with safe-start support.
@@ -250,6 +251,11 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 		return managed.ExternalCreation{}, errors.New(errNotTenant)
 	}
 
+	// Check that tenantId is unique across the cluster.
+	if err := c.validateUniqueTenantID(ctx, cr); err != nil {
+		return managed.ExternalCreation{}, err
+	}
+
 	meta.SetExternalName(cr, cr.Spec.ForProvider.TenantID)
 	syncStatus(cr)
 
@@ -325,6 +331,26 @@ func (c *external) syncGrafanaOrgMapping(ctx context.Context, cr *v1alpha1.Tenan
 
 	if err := grafana.SyncOrgMapping(ctx, c.sso, mappings); err != nil {
 		return errors.Wrap(err, "cannot sync Grafana org mapping")
+	}
+	return nil
+}
+
+// validateUniqueTenantID checks that no other Tenant in the cluster has the same tenantId.
+func (c *external) validateUniqueTenantID(ctx context.Context, cr *v1alpha1.Tenant) error {
+	list := &v1alpha1.TenantList{}
+	if err := c.kube.List(ctx, list); err != nil {
+		return errors.Wrap(err, errListTenants)
+	}
+
+	for i := range list.Items {
+		t := &list.Items[i]
+		// Skip self (in case of updates, though this is called from Create)
+		if t.GetUID() == cr.GetUID() {
+			continue
+		}
+		if t.Spec.ForProvider.TenantID == cr.Spec.ForProvider.TenantID {
+			return errors.Errorf("%s: %s", errDuplicateTenant, cr.Spec.ForProvider.TenantID)
+		}
 	}
 	return nil
 }

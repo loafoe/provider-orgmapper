@@ -286,6 +286,7 @@ func TestCreate(t *testing.T) {
 		},
 		"NotATenant": {
 			reason: "Should return an error if the managed resource is not a Tenant.",
+			kube:   newFakeKube(),
 			sso:    defaultMockSSO(),
 			args: args{
 				ctx: context.Background(),
@@ -293,6 +294,26 @@ func TestCreate(t *testing.T) {
 			},
 			want: want{
 				err: errNotTenantError(),
+			},
+		},
+		"DuplicateTenantID": {
+			reason: "Should return an error if another Tenant with the same tenantId exists.",
+			kube: func() client.Client {
+				existing := tenantWithSpec("acme", "org-1", nil, retention)
+				existing.SetUID("existing-uid")
+				return newFakeKube(existing)
+			}(),
+			sso: defaultMockSSO(),
+			args: args{
+				ctx: context.Background(),
+				mg: func() resource.Managed {
+					cr := tenantWithSpec("acme", "org-2", nil, retention) // Same tenantId "acme"
+					cr.SetUID("new-uid")
+					return cr
+				}(),
+			},
+			want: want{
+				err: errors.New("tenant with this tenantId already exists: acme"),
 			},
 		},
 	}
