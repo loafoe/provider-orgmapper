@@ -84,7 +84,6 @@ func OrgMappingContains(orgMapping, orgID string) bool {
 func BuildOrgMapping(tenants []TenantMapping) string {
 	entries := make([]string, 0, len(tenants))
 	for _, t := range tenants {
-		entries = append(entries, fmt.Sprintf("%s:%s:Viewer", t.OrgID, t.OrgID))
 		for _, g := range t.ViewerGroups {
 			entries = append(entries, fmt.Sprintf("%s:%s:Viewer", escapeColon(g), t.OrgID))
 		}
