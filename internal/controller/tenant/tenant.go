@@ -26,6 +26,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	xpv1 "github.com/crossplane/crossplane-runtime/v2/apis/common/v1"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/controller"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/event"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/logging"
@@ -47,7 +48,6 @@ const (
 	errGetCreds     = "cannot get credentials"
 	errNewClient    = "cannot create Grafana client"
 	errListTenants  = "cannot list Tenants"
-	errSyncMapping = "cannot sync Grafana org mapping"
 )
 
 // SetupGated adds a controller that reconciles Tenant managed resources with safe-start support.
@@ -203,11 +203,27 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
 
-	// For this resource type, the CR itself is the source of truth.
+	// For this "virtual" resource type where the CR is the source of truth,
+	// if the resource is being deleted, sync to Grafana (remove tenant from
+	// mapping) and then report ResourceExists: false so the managed reconciler
+	// can remove the finalizer. This replaces the normal Delete flow.
+	if cr.GetDeletionTimestamp() != nil {
+		if err := c.syncGrafanaOrgMapping(ctx, cr, true); err != nil {
+			c.logger.Info("Failed to sync Grafana org mapping during delete", "error", err)
+		}
+		return managed.ExternalObservation{ResourceExists: false}, nil
+	}
+
 	// Compare spec vs status to determine if an update is needed.
 	// The status is synced to spec during Create/Update and persisted by the
 	// managed reconciler.
 	upToDate := isUpToDate(cr)
+
+	// For virtual resources, explicitly set the Available condition when up-to-date.
+	// This ensures the Ready status is properly reflected.
+	if upToDate {
+		cr.SetConditions(xpv1.Available())
+	}
 
 	return managed.ExternalObservation{
 		ResourceExists:   true,
@@ -224,8 +240,10 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	meta.SetExternalName(cr, cr.Spec.ForProvider.TenantID)
 	syncStatus(cr)
 
+	// Grafana sync is best-effort; log errors but don't block resource creation.
+	// The CR itself is the source of truth for this resource type.
 	if err := c.syncGrafanaOrgMapping(ctx, cr, false); err != nil {
-		return managed.ExternalCreation{}, err
+		c.logger.Info("Failed to sync Grafana org mapping", "error", err)
 	}
 
 	return managed.ExternalCreation{}, nil
@@ -239,8 +257,10 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 
 	syncStatus(cr)
 
+	// Grafana sync is best-effort; log errors but don't block resource updates.
+	// The CR itself is the source of truth for this resource type.
 	if err := c.syncGrafanaOrgMapping(ctx, cr, false); err != nil {
-		return managed.ExternalUpdate{}, err
+		c.logger.Info("Failed to sync Grafana org mapping", "error", err)
 	}
 
 	return managed.ExternalUpdate{}, nil
@@ -252,8 +272,10 @@ func (c *external) Delete(ctx context.Context, mg resource.Managed) (managed.Ext
 		return managed.ExternalDelete{}, errors.New(errNotTenant)
 	}
 
+	// Grafana sync is best-effort; log errors but don't block resource deletion.
+	// The CR itself is the source of truth for this resource type.
 	if err := c.syncGrafanaOrgMapping(ctx, cr, true); err != nil {
-		return managed.ExternalDelete{}, err
+		c.logger.Info("Failed to sync Grafana org mapping during delete", "error", err)
 	}
 
 	return managed.ExternalDelete{}, nil
@@ -289,7 +311,7 @@ func (c *external) syncGrafanaOrgMapping(ctx context.Context, cr *v1alpha1.Tenan
 	c.logger.Debug("Syncing Grafana org mapping", "org_mapping", orgMapping)
 
 	if err := grafana.SyncOrgMapping(ctx, c.sso, mappings); err != nil {
-		return errors.Wrap(err, errSyncMapping)
+		return errors.Wrap(err, "cannot sync Grafana org mapping")
 	}
 	return nil
 }
