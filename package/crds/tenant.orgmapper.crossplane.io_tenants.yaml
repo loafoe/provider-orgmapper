@@ -66,6 +66,12 @@ spec:
               forProvider:
                 description: TenantParameters are the configurable fields of a Tenant.
                 properties:
+                  adminGroups:
+                    description: AdminGroups is a list of group claims that grant
+                      Admin role in this tenant's Grafana org.
+                    items:
+                      type: string
+                    type: array
                   admins:
                     description: Admins is a list of tenant administrators (typically
                       GitHub IDs).
@@ -182,6 +188,10 @@ spec:
               atProvider:
                 description: TenantObservation are the observable fields of a Tenant.
                 properties:
+                  adminGroups:
+                    items:
+                      type: string
+                    type: array
                   admins:
                     items:
                       type: string

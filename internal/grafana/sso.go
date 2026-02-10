@@ -33,6 +33,7 @@ type TenantMapping struct {
 	OrgID        string
 	ViewerGroups []string
 	EditorGroups []string
+	AdminGroups  []string
 }
 
 // SSOClient is the subset of the Grafana SSO settings API used by this package.
@@ -79,7 +80,6 @@ func OrgMappingContains(orgMapping, orgID string) bool {
 
 // BuildOrgMapping produces the comma-separated org_mapping value from a set of
 // tenant mappings. For each tenant it emits:
-//   - <orgId>:<orgId>:Viewer  (the default entry)
 //   - <group>:<orgId>:Viewer  for each ViewerGroup
 //   - <group>:<orgId>:Editor  for each EditorGroup
 //
@@ -93,6 +93,9 @@ func BuildOrgMapping(tenants []TenantMapping) string {
 		}
 		for _, g := range t.EditorGroups {
 			entries = append(entries, fmt.Sprintf("%s:%s:Editor", escapeColon(g), t.OrgID))
+		}
+		for _, g := range t.AdminGroups {
+			entries = append(entries, fmt.Sprintf("%s:%s:Admin", escapeColon(g), t.OrgID))
 		}
 	}
 	return strings.Join(entries, ",")

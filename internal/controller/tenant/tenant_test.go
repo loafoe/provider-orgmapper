@@ -528,20 +528,36 @@ func TestIsUpToDate(t *testing.T) {
 			want: false,
 		},
 		"MatchingGroups": {
-			reason: "Should return true when viewerGroups and editorGroups match.",
+			reason: "Should return true when viewerGroups, editorGroups, and adminGroups match.",
 			cr: func() *v1alpha1.Tenant {
 				cr := tenantWithSpec("acme", "org-1", nil, v1alpha1.RetentionPolicy{})
 				cr.Spec.ForProvider.ViewerGroups = []string{"team-a"}
 				cr.Spec.ForProvider.EditorGroups = []string{"devs"}
+				cr.Spec.ForProvider.AdminGroups = []string{"admins"}
 				cr.Status.AtProvider = v1alpha1.TenantObservation{
 					TenantID:     "acme",
 					OrgID:        "org-1",
 					ViewerGroups: []string{"team-a"},
 					EditorGroups: []string{"devs"},
+					AdminGroups:  []string{"admins"},
 				}
 				return cr
 			}(),
 			want: true,
+		},
+		"DifferentAdminGroups": {
+			reason: "Should return false when adminGroups differ.",
+			cr: func() *v1alpha1.Tenant {
+				cr := tenantWithSpec("acme", "org-1", nil, v1alpha1.RetentionPolicy{})
+				cr.Spec.ForProvider.AdminGroups = []string{"platform-admins"}
+				cr.Status.AtProvider = v1alpha1.TenantObservation{
+					TenantID:    "acme",
+					OrgID:       "org-1",
+					AdminGroups: []string{"other-admins"},
+				}
+				return cr
+			}(),
+			want: false,
 		},
 	}
 

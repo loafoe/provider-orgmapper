@@ -323,6 +323,7 @@ func (c *external) syncGrafanaOrgMapping(ctx context.Context, cr *v1alpha1.Tenan
 			OrgID:        t.Spec.ForProvider.OrgID,
 			ViewerGroups: t.Spec.ForProvider.ViewerGroups,
 			EditorGroups: t.Spec.ForProvider.EditorGroups,
+			AdminGroups:  t.Spec.ForProvider.AdminGroups,
 		})
 	}
 
@@ -360,7 +361,7 @@ func (c *external) validateUniqueTenantID(ctx context.Context, cr *v1alpha1.Tena
 func (c *external) isGrafanaDrifted(cr *v1alpha1.Tenant) (bool, error) {
 	// If the tenant has no groups, there's nothing to check in Grafana.
 	// No entries will be generated, so we consider it "not drifted".
-	if len(cr.Spec.ForProvider.ViewerGroups) == 0 && len(cr.Spec.ForProvider.EditorGroups) == 0 {
+	if len(cr.Spec.ForProvider.ViewerGroups) == 0 && len(cr.Spec.ForProvider.EditorGroups) == 0 && len(cr.Spec.ForProvider.AdminGroups) == 0 {
 		return false, nil
 	}
 
@@ -390,6 +391,7 @@ func syncStatus(cr *v1alpha1.Tenant) {
 		Admins:       cr.Spec.ForProvider.Admins,
 		ViewerGroups: cr.Spec.ForProvider.ViewerGroups,
 		EditorGroups: cr.Spec.ForProvider.EditorGroups,
+		AdminGroups:  cr.Spec.ForProvider.AdminGroups,
 		Retention:    cr.Spec.ForProvider.Retention,
 		LastUpdated:  time.Now().UTC().Format(time.RFC3339),
 	}
@@ -416,6 +418,9 @@ func isUpToDate(cr *v1alpha1.Tenant) bool {
 		return false
 	}
 	if !slicesEqual(spec.EditorGroups, obs.EditorGroups) {
+		return false
+	}
+	if !slicesEqual(spec.AdminGroups, obs.AdminGroups) {
 		return false
 	}
 	return true

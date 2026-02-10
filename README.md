@@ -220,6 +220,10 @@ spec:
       - acme-sre
       - acme-platform
 
+    # Groups that get Admin role in Grafana
+    adminGroups:
+      - acme-platform-leads
+
     # Data retention configuration
     retention:
       logs: "30d"
@@ -263,6 +267,7 @@ kubectl describe tenant acme-corp
 | `spec.forProvider.admins` | []string | No | List of tenant administrators |
 | `spec.forProvider.viewerGroups` | []string | No | Groups with Viewer role |
 | `spec.forProvider.editorGroups` | []string | No | Groups with Editor role |
+| `spec.forProvider.adminGroups` | []string | No | Groups with Admin role |
 | `spec.forProvider.retention.logs` | string | No | Log retention (e.g., "30d") |
 | `spec.forProvider.retention.metrics` | string | No | Metrics retention |
 | `spec.forProvider.retention.traces` | string | No | Traces retention |
@@ -352,6 +357,8 @@ spec:
     editorGroups:
       - platform-engineers
       - sre-team
+    adminGroups:
+      - platform-leads
     retention:
       logs: "60d"
       metrics: "180d"

@@ -99,6 +99,18 @@ func TestBuildOrgMapping(t *testing.T) {
 			},
 			want: `simple-group:org-1:Viewer,ns\:complex\:group:org-1:Viewer,editors:org-1:Editor`,
 		},
+		"WithAdminGroups": {
+			tenants: []TenantMapping{
+				{OrgID: "org-1", AdminGroups: []string{"platform-admins"}},
+			},
+			want: "platform-admins:org-1:Admin",
+		},
+		"WithAllGroupTypes": {
+			tenants: []TenantMapping{
+				{OrgID: "org-1", ViewerGroups: []string{"readers"}, EditorGroups: []string{"writers"}, AdminGroups: []string{"admins"}},
+			},
+			want: "readers:org-1:Viewer,writers:org-1:Editor,admins:org-1:Admin",
+		},
 	}
 
 	for name, tc := range cases {
@@ -173,10 +185,10 @@ func TestSyncOrgMapping(t *testing.T) {
 				},
 			},
 			tenants: []TenantMapping{
-				{OrgID: "org-1", ViewerGroups: []string{"team-a"}},
+				{OrgID: "org-1", ViewerGroups: []string{"team-a"}, AdminGroups: []string{"admins-a"}},
 				{OrgID: "org-2", ViewerGroups: []string{"team-b"}},
 			},
-			wantMap: "team-a:org-1:Viewer,team-b:org-2:Viewer",
+			wantMap: "team-a:org-1:Viewer,admins-a:org-1:Admin,team-b:org-2:Viewer",
 		},
 		"NotFoundCreatesNew": {
 			mock: &mockSSO{

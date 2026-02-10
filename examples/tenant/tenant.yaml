@@ -10,6 +10,13 @@ spec:
     admins:
       - github-user-1
       - github-user-2
+    viewerGroups:
+      - acme-developers
+      - acme-oncall
+    editorGroups:
+      - acme-sre
+    adminGroups:
+      - acme-platform-leads
     retention:
       logs: "30d"
       metrics: "90d"

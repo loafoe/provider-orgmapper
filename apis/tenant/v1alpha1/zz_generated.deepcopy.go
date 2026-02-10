@@ -104,6 +104,11 @@ func (in *TenantObservation) DeepCopyInto(out *TenantObservation) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
+	if in.AdminGroups != nil {
+		in, out := &in.AdminGroups, &out.AdminGroups
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	out.Retention = in.Retention
 }
 
@@ -132,6 +137,11 @@ func (in *TenantParameters) DeepCopyInto(out *TenantParameters) {
 	}
 	if in.EditorGroups != nil {
 		in, out := &in.EditorGroups, &out.EditorGroups
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
+	if in.AdminGroups != nil {
+		in, out := &in.AdminGroups, &out.AdminGroups
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}

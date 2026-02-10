@@ -50,6 +50,10 @@ type TenantParameters struct {
 	// +optional
 	EditorGroups []string `json:"editorGroups,omitempty"`
 
+	// AdminGroups is a list of group claims that grant Admin role in this tenant's Grafana org.
+	// +optional
+	AdminGroups []string `json:"adminGroups,omitempty"`
+
 	// Retention defines data retention settings for each signal type.
 	// +kubebuilder:validation:Required
 	Retention RetentionPolicy `json:"retention"`
@@ -85,6 +89,7 @@ type TenantObservation struct {
 	Admins       []string        `json:"admins,omitempty"`
 	ViewerGroups []string        `json:"viewerGroups,omitempty"`
 	EditorGroups []string        `json:"editorGroups,omitempty"`
+	AdminGroups  []string        `json:"adminGroups,omitempty"`
 	Retention    RetentionPolicy `json:"retention,omitempty"`
 	LastUpdated  string          `json:"lastUpdated,omitempty"`
 }
