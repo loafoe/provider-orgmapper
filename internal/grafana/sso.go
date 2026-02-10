@@ -61,12 +61,16 @@ func SyncOrgMapping(_ context.Context, ssoc SSOClient, tenants []TenantMapping) 
 	return nil
 }
 
-// OrgMappingContains checks whether the given org_mapping string contains an
-// entry for the specified orgId.
+// OrgMappingContains checks whether the given org_mapping string contains any
+// entry for the specified orgId. Entries have the format <group>:<orgId>:<role>.
 func OrgMappingContains(orgMapping, orgID string) bool {
-	entry := fmt.Sprintf("%s:%s:Viewer", orgID, orgID)
+	if orgMapping == "" {
+		return false
+	}
+	// Check if any entry has this orgId as the second field (format: group:orgId:role)
+	suffix := ":" + orgID + ":"
 	for _, part := range strings.Split(orgMapping, ",") {
-		if strings.TrimSpace(part) == entry {
+		if strings.Contains(strings.TrimSpace(part), suffix) {
 			return true
 		}
 	}

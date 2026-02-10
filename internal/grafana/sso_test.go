@@ -55,47 +55,49 @@ func TestBuildOrgMapping(t *testing.T) {
 			want:    "",
 		},
 		"SingleTenant": {
+			// Tenant without groups produces no entries
 			tenants: []TenantMapping{{OrgID: "org-1"}},
-			want:    "org-1:org-1:Viewer",
+			want:    "",
 		},
 		"MultipleTenants": {
+			// Tenants without groups produce no entries
 			tenants: []TenantMapping{
 				{OrgID: "org-1"},
 				{OrgID: "org-2"},
 				{OrgID: "org-3"},
 			},
-			want: "org-1:org-1:Viewer,org-2:org-2:Viewer,org-3:org-3:Viewer",
+			want: "",
 		},
 		"WithViewerGroups": {
 			tenants: []TenantMapping{
 				{OrgID: "org-1", ViewerGroups: []string{"team-a", "team-b"}},
 			},
-			want: "org-1:org-1:Viewer,team-a:org-1:Viewer,team-b:org-1:Viewer",
+			want: "team-a:org-1:Viewer,team-b:org-1:Viewer",
 		},
 		"WithEditorGroups": {
 			tenants: []TenantMapping{
 				{OrgID: "org-1", EditorGroups: []string{"devs"}},
 			},
-			want: "org-1:org-1:Viewer,devs:org-1:Editor",
+			want: "devs:org-1:Editor",
 		},
 		"WithViewerAndEditorGroups": {
 			tenants: []TenantMapping{
 				{OrgID: "org-1", ViewerGroups: []string{"readers"}, EditorGroups: []string{"writers"}},
-				{OrgID: "org-2"},
+				{OrgID: "org-2"}, // No groups, no entry
 			},
-			want: "org-1:org-1:Viewer,readers:org-1:Viewer,writers:org-1:Editor,org-2:org-2:Viewer",
+			want: "readers:org-1:Viewer,writers:org-1:Editor",
 		},
 		"WithColonsInGroupNames": {
 			tenants: []TenantMapping{
 				{OrgID: "org-1", ViewerGroups: []string{"oidc:team:viewers"}, EditorGroups: []string{"oidc:team:editors"}},
 			},
-			want: `org-1:org-1:Viewer,oidc\:team\:viewers:org-1:Viewer,oidc\:team\:editors:org-1:Editor`,
+			want: `oidc\:team\:viewers:org-1:Viewer,oidc\:team\:editors:org-1:Editor`,
 		},
 		"WithMixedGroupNames": {
 			tenants: []TenantMapping{
 				{OrgID: "org-1", ViewerGroups: []string{"simple-group", "ns:complex:group"}, EditorGroups: []string{"editors"}},
 			},
-			want: `org-1:org-1:Viewer,simple-group:org-1:Viewer,ns\:complex\:group:org-1:Viewer,editors:org-1:Editor`,
+			want: `simple-group:org-1:Viewer,ns\:complex\:group:org-1:Viewer,editors:org-1:Editor`,
 		},
 	}
 
@@ -116,12 +118,12 @@ func TestOrgMappingContains(t *testing.T) {
 		want       bool
 	}{
 		"Present": {
-			orgMapping: "org-1:org-1:Viewer,org-2:org-2:Viewer",
+			orgMapping: "team-a:org-1:Viewer,team-b:org-2:Viewer",
 			orgID:      "org-1",
 			want:       true,
 		},
 		"Absent": {
-			orgMapping: "org-1:org-1:Viewer,org-2:org-2:Viewer",
+			orgMapping: "team-a:org-1:Viewer,team-b:org-2:Viewer",
 			orgID:      "org-3",
 			want:       false,
 		},
@@ -131,7 +133,12 @@ func TestOrgMappingContains(t *testing.T) {
 			want:       false,
 		},
 		"SingleMatch": {
-			orgMapping: "org-1:org-1:Viewer",
+			orgMapping: "viewers:org-1:Viewer",
+			orgID:      "org-1",
+			want:       true,
+		},
+		"MultipleEntriesForSameOrg": {
+			orgMapping: "team-a:org-1:Viewer,team-b:org-1:Editor",
 			orgID:      "org-1",
 			want:       true,
 		},
@@ -165,15 +172,18 @@ func TestSyncOrgMapping(t *testing.T) {
 					},
 				},
 			},
-			tenants: []TenantMapping{{OrgID: "org-1"}, {OrgID: "org-2"}},
-			wantMap: "org-1:org-1:Viewer,org-2:org-2:Viewer",
+			tenants: []TenantMapping{
+				{OrgID: "org-1", ViewerGroups: []string{"team-a"}},
+				{OrgID: "org-2", ViewerGroups: []string{"team-b"}},
+			},
+			wantMap: "team-a:org-1:Viewer,team-b:org-2:Viewer",
 		},
 		"NotFoundCreatesNew": {
 			mock: &mockSSO{
 				getErr: &sso_settings.GetProviderSettingsNotFound{},
 			},
-			tenants: []TenantMapping{{OrgID: "org-1"}},
-			wantMap: "org-1:org-1:Viewer",
+			tenants: []TenantMapping{{OrgID: "org-1", ViewerGroups: []string{"viewers"}}},
+			wantMap: "viewers:org-1:Viewer",
 		},
 		"GetError": {
 			mock: &mockSSO{
@@ -190,7 +200,7 @@ func TestSyncOrgMapping(t *testing.T) {
 				},
 				putErr: errors.New("forbidden"),
 			},
-			tenants: []TenantMapping{{OrgID: "org-1"}},
+			tenants: []TenantMapping{{OrgID: "org-1", ViewerGroups: []string{"viewers"}}},
 			wantErr: true,
 		},
 		"PreservesExistingSettings": {
@@ -205,8 +215,8 @@ func TestSyncOrgMapping(t *testing.T) {
 					},
 				},
 			},
-			tenants: []TenantMapping{{OrgID: "org-1"}},
-			wantMap: "org-1:org-1:Viewer",
+			tenants: []TenantMapping{{OrgID: "org-1", ViewerGroups: []string{"new-team"}}},
+			wantMap: "new-team:org-1:Viewer",
 		},
 	}
 

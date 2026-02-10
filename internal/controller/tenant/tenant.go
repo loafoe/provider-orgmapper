@@ -219,10 +219,23 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	// managed reconciler.
 	upToDate := isUpToDate(cr)
 
-	// For virtual resources, explicitly set the Available condition when up-to-date.
-	// This ensures the Ready status is properly reflected.
+	// For virtual resources, explicitly set the Available condition when the
+	// CR state is consistent (spec == status). This ensures the Ready status
+	// is properly reflected regardless of Grafana state.
 	if upToDate {
 		cr.SetConditions(xpv1.Available())
+
+		// Check for Grafana drift only when the CR is otherwise up-to-date.
+		// If drift is detected, trigger an Update to resync Grafana.
+		// Errors during drift check are logged but don't affect Ready state -
+		// this prevents infinite loops when Grafana is temporarily unreachable.
+		drifted, err := c.isGrafanaDrifted(cr)
+		if err != nil {
+			c.logger.Debug("Failed to check Grafana drift", "error", err)
+		} else if drifted {
+			c.logger.Info("Grafana org_mapping drift detected, triggering resync")
+			upToDate = false
+		}
 	}
 
 	return managed.ExternalObservation{
@@ -240,10 +253,10 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 	meta.SetExternalName(cr, cr.Spec.ForProvider.TenantID)
 	syncStatus(cr)
 
-	// Grafana sync is best-effort; log errors but don't block resource creation.
-	// The CR itself is the source of truth for this resource type.
+	// Grafana sync must succeed for Create - this ensures the tenant is
+	// properly registered in Grafana's org_mapping before the resource is Ready.
 	if err := c.syncGrafanaOrgMapping(ctx, cr, false); err != nil {
-		c.logger.Info("Failed to sync Grafana org mapping", "error", err)
+		return managed.ExternalCreation{}, err
 	}
 
 	return managed.ExternalCreation{}, nil
@@ -314,6 +327,33 @@ func (c *external) syncGrafanaOrgMapping(ctx context.Context, cr *v1alpha1.Tenan
 		return errors.Wrap(err, "cannot sync Grafana org mapping")
 	}
 	return nil
+}
+
+// isGrafanaDrifted checks whether this tenant's org_mapping entries are present in
+// the Grafana SSO settings. Returns true if the tenant is missing from the mapping.
+func (c *external) isGrafanaDrifted(cr *v1alpha1.Tenant) (bool, error) {
+	// If the tenant has no groups, there's nothing to check in Grafana.
+	// No entries will be generated, so we consider it "not drifted".
+	if len(cr.Spec.ForProvider.ViewerGroups) == 0 && len(cr.Spec.ForProvider.EditorGroups) == 0 {
+		return false, nil
+	}
+
+	resp, err := c.sso.GetProviderSettings("generic_oauth")
+	if err != nil {
+		if grafana.IsNotFound(err) {
+			// SSO not configured yet - this is drift (needs to be set up)
+			return true, nil
+		}
+		return false, err
+	}
+
+	settings, ok := resp.Payload.Settings.(map[string]any)
+	if !ok {
+		return true, nil
+	}
+
+	orgMapping, _ := settings["orgMapping"].(string)
+	return !grafana.OrgMappingContains(orgMapping, cr.Spec.ForProvider.OrgID), nil
 }
 
 // syncStatus copies spec fields into status and sets the lastUpdated timestamp.

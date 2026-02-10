@@ -61,11 +61,15 @@ func (m *mockSSO) UpdateProviderSettings(key string, body *models.UpdateProvider
 }
 
 // defaultMockSSO returns a mock that reports the expected orgMapping for the
-// given orgIDs. Useful for Observe tests.
+// given orgIDs. Each org gets a default viewer group entry.
 func defaultMockSSO(orgIDs ...string) *mockSSO {
 	tenants := make([]grafana.TenantMapping, 0, len(orgIDs))
 	for _, id := range orgIDs {
-		tenants = append(tenants, grafana.TenantMapping{OrgID: id})
+		// Add a default viewer group so drift detection works
+		tenants = append(tenants, grafana.TenantMapping{
+			OrgID:        id,
+			ViewerGroups: []string{"default-viewers"},
+		})
 	}
 	return &mockSSO{
 		getResp: &sso_settings.GetProviderSettingsOK{
@@ -195,19 +199,21 @@ func TestObserve(t *testing.T) {
 				},
 			},
 		},
-		"GrafanaStateDoesNotAffectObserve": {
-			reason: "Should return ResourceUpToDate true when spec matches status, regardless of Grafana state (Grafana sync happens in Create/Update).",
+		"GrafanaDriftDetected": {
+			reason: "Should return ResourceUpToDate false when Grafana org_mapping drifted, to trigger resync.",
 			sso:    defaultMockSSO("org-OTHER"),
 			args: args{
 				ctx: context.Background(),
 				mg: func() resource.Managed {
 					cr := tenantWithSpec("acme", "org-1", nil, retention)
+					cr.Spec.ForProvider.ViewerGroups = []string{"team-a"} // Has groups, so drift check runs
 					meta.SetExternalName(cr, "acme")
 					cr.Status.AtProvider = v1alpha1.TenantObservation{
-						TenantID:    "acme",
-						OrgID:       "org-1",
-						Retention:   retention,
-						LastUpdated: "2025-01-01T00:00:00Z",
+						TenantID:     "acme",
+						OrgID:        "org-1",
+						ViewerGroups: []string{"team-a"},
+						Retention:    retention,
+						LastUpdated:  "2025-01-01T00:00:00Z",
 					}
 					return cr
 				}(),
@@ -215,7 +221,7 @@ func TestObserve(t *testing.T) {
 			want: want{
 				o: managed.ExternalObservation{
 					ResourceExists:   true,
-					ResourceUpToDate: true,
+					ResourceUpToDate: false,
 				},
 			},
 		},
@@ -234,7 +240,7 @@ func TestObserve(t *testing.T) {
 
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			e := external{sso: tc.sso}
+			e := external{sso: tc.sso, logger: logging.NewNopLogger()}
 			got, err := e.Observe(tc.args.ctx, tc.args.mg)
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
 				t.Errorf("\n%s\ne.Observe(...): -want error, +got error:\n%s\n", tc.reason, diff)
