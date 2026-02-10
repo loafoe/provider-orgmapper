@@ -28,6 +28,7 @@ import (
 
 	"github.com/crossplane/crossplane-runtime/v2/pkg/controller"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/event"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/logging"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/meta"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/ratelimiter"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/reconciler/managed"
@@ -46,8 +47,7 @@ const (
 	errGetCreds     = "cannot get credentials"
 	errNewClient    = "cannot create Grafana client"
 	errListTenants  = "cannot list Tenants"
-	errSyncMapping  = "cannot sync Grafana org mapping"
-	errGetSSO       = "cannot get Grafana SSO settings"
+	errSyncMapping = "cannot sync Grafana org mapping"
 )
 
 // SetupGated adds a controller that reconciles Tenant managed resources with safe-start support.
@@ -66,8 +66,9 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 
 	opts := []managed.ReconcilerOption{
 		managed.WithExternalConnector(&connector{
-			kube:  mgr.GetClient(),
-			usage: resource.NewProviderConfigUsageTracker(mgr.GetClient(), &apisv1alpha1.ProviderConfigUsage{}),
+			kube:   mgr.GetClient(),
+			usage:  resource.NewProviderConfigUsageTracker(mgr.GetClient(), &apisv1alpha1.ProviderConfigUsage{}),
+			logger: o.Logger,
 		}),
 		managed.WithLogger(o.Logger.WithValues("controller", name)),
 		managed.WithPollInterval(o.PollInterval),
@@ -107,9 +108,11 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 
 // connector produces an ExternalClient by extracting Grafana credentials from
 // the referenced ProviderConfig.
+// the referenced ProviderConfig.
 type connector struct {
-	kube  client.Client
-	usage *resource.ProviderConfigUsageTracker
+	kube   client.Client
+	usage  *resource.ProviderConfigUsageTracker
+	logger logging.Logger
 }
 
 // Connect extracts credentials from the ProviderConfig, creates a Grafana
@@ -135,8 +138,9 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.E
 	}
 
 	return &external{
-		kube: c.kube,
-		sso:  gClient.SsoSettings,
+		kube:   c.kube,
+		sso:    gClient.SsoSettings,
+		logger: c.logger,
 	}, nil
 }
 
@@ -181,9 +185,11 @@ func (c *connector) extractConfig(ctx context.Context, cr *v1alpha1.Tenant) (str
 
 // external observes, creates, updates, and deletes Tenant resources,
 // syncing org_mapping to Grafana SSO settings on each mutation.
+// syncing org_mapping to Grafana SSO settings on each mutation.
 type external struct {
-	kube client.Client
-	sso  grafana.SSOClient
+	kube   client.Client
+	sso    grafana.SSOClient
+	logger logging.Logger
 }
 
 func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.ExternalObservation, error) {
@@ -197,24 +203,11 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		return managed.ExternalObservation{ResourceExists: false}, nil
 	}
 
-	// If the status has not been populated yet, treat as not existing.
-	if cr.Status.AtProvider.TenantID == "" {
-		return managed.ExternalObservation{ResourceExists: false}, nil
-	}
-
+	// For this resource type, the CR itself is the source of truth.
+	// Compare spec vs status to determine if an update is needed.
+	// The status is synced to spec during Create/Update and persisted by the
+	// managed reconciler.
 	upToDate := isUpToDate(cr)
-
-	// Check Grafana SSO drift: verify this tenant's orgId is present in the
-	// org_mapping. If not, mark as not up-to-date so Update is triggered.
-	if upToDate {
-		drifted, err := c.isGrafanaDrifted(cr)
-		if err != nil {
-			return managed.ExternalObservation{}, errors.Wrap(err, errGetSSO)
-		}
-		if drifted {
-			upToDate = false
-		}
-	}
 
 	return managed.ExternalObservation{
 		ResourceExists:   true,
@@ -292,27 +285,13 @@ func (c *external) syncGrafanaOrgMapping(ctx context.Context, cr *v1alpha1.Tenan
 		})
 	}
 
+	orgMapping := grafana.BuildOrgMapping(mappings)
+	c.logger.Debug("Syncing Grafana org mapping", "org_mapping", orgMapping)
+
 	if err := grafana.SyncOrgMapping(ctx, c.sso, mappings); err != nil {
 		return errors.Wrap(err, errSyncMapping)
 	}
 	return nil
-}
-
-// isGrafanaDrifted checks whether this tenant's org_mapping entry is present in
-// the Grafana SSO settings.
-func (c *external) isGrafanaDrifted(cr *v1alpha1.Tenant) (bool, error) {
-	resp, err := c.sso.GetProviderSettings("generic_oauth")
-	if err != nil {
-		return false, err
-	}
-
-	settings, ok := resp.Payload.Settings.(map[string]any)
-	if !ok {
-		return true, nil
-	}
-
-	orgMapping, _ := settings["orgMapping"].(string)
-	return !grafana.OrgMappingContains(orgMapping, cr.Spec.ForProvider.OrgID), nil
 }
 
 // syncStatus copies spec fields into status and sets the lastUpdated timestamp.

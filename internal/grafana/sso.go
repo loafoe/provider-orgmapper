@@ -108,7 +108,7 @@ func getOrInitSettings(ssoc SSOClient) (map[string]interface{}, error) {
 	resp, err := ssoc.GetProviderSettings(ssoProvider)
 	if err != nil {
 		// If the provider is not configured yet, start with an empty map.
-		if isNotFound(err) {
+		if IsNotFound(err) {
 			return map[string]interface{}{}, nil
 		}
 		return nil, err
@@ -121,8 +121,8 @@ func getOrInitSettings(ssoc SSOClient) (map[string]interface{}, error) {
 	return m, nil
 }
 
-// isNotFound returns true when the error represents a 404 response.
-func isNotFound(err error) bool {
+// IsNotFound returns true when the error represents a 404 response.
+func IsNotFound(err error) bool {
 	var notFound *sso_settings.GetProviderSettingsNotFound
 	return errors.As(err, &notFound)
 }

@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	clfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	"github.com/crossplane/crossplane-runtime/v2/pkg/logging"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/meta"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/reconciler/managed"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/resource"
@@ -142,7 +143,7 @@ func TestObserve(t *testing.T) {
 				}(),
 			},
 			want: want{
-				o: managed.ExternalObservation{ResourceExists: false},
+				o: managed.ExternalObservation{ResourceExists: true, ResourceUpToDate: false},
 			},
 		},
 		"UpToDate": {
@@ -194,8 +195,8 @@ func TestObserve(t *testing.T) {
 				},
 			},
 		},
-		"GrafanaDrift": {
-			reason: "Should return ResourceUpToDate false when Grafana SSO is missing the tenant's entry.",
+		"GrafanaStateDoesNotAffectObserve": {
+			reason: "Should return ResourceUpToDate true when spec matches status, regardless of Grafana state (Grafana sync happens in Create/Update).",
 			sso:    defaultMockSSO("org-OTHER"),
 			args: args{
 				ctx: context.Background(),
@@ -214,7 +215,7 @@ func TestObserve(t *testing.T) {
 			want: want{
 				o: managed.ExternalObservation{
 					ResourceExists:   true,
-					ResourceUpToDate: false,
+					ResourceUpToDate: true,
 				},
 			},
 		},
@@ -292,7 +293,7 @@ func TestCreate(t *testing.T) {
 
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			e := external{kube: tc.kube, sso: tc.sso}
+			e := external{kube: tc.kube, sso: tc.sso, logger: logging.NewNopLogger()}
 			got, err := e.Create(tc.args.ctx, tc.args.mg)
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
 				t.Errorf("\n%s\ne.Create(...): -want error, +got error:\n%s\n", tc.reason, diff)
@@ -364,7 +365,7 @@ func TestUpdate(t *testing.T) {
 
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			e := external{kube: tc.kube, sso: tc.sso}
+			e := external{kube: tc.kube, sso: tc.sso, logger: logging.NewNopLogger()}
 			got, err := e.Update(tc.args.ctx, tc.args.mg)
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
 				t.Errorf("\n%s\ne.Update(...): -want error, +got error:\n%s\n", tc.reason, diff)
@@ -391,7 +392,7 @@ func TestUpdate(t *testing.T) {
 
 func TestDelete(t *testing.T) {
 	cr := tenantWithSpec("acme", "org-1", nil, v1alpha1.RetentionPolicy{})
-	e := external{kube: newFakeKube(), sso: defaultMockSSO()}
+	e := external{kube: newFakeKube(), sso: defaultMockSSO(), logger: logging.NewNopLogger()}
 	got, err := e.Delete(context.Background(), cr)
 	if err != nil {
 		t.Errorf("e.Delete(...): unexpected error: %v", err)
