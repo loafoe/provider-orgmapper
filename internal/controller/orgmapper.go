@@ -24,12 +24,11 @@ import (
 	"github.com/loafoe/provider-orgmapper/internal/controller/tenant"
 )
 
-// SetupGated creates all OrgMapper controllers with safe-start support and adds them to
-// the supplied manager.
-func SetupGated(mgr ctrl.Manager, o controller.Options) error {
+// Setup creates all OrgMapper controllers and adds them to the supplied manager.
+func Setup(mgr ctrl.Manager, o controller.Options) error {
 	for _, setup := range []func(ctrl.Manager, controller.Options) error{
 		config.Setup,
-		tenant.SetupGated,
+		tenant.Setup,
 	} {
 		if err := setup(mgr, o); err != nil {
 			return err

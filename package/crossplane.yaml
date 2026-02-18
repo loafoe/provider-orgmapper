@@ -8,6 +8,4 @@ metadata:
     meta.crossplane.io/license: Apache-2.0
     meta.crossplane.io/description: |
       A Crossplane provider for managing LGTM stack tenants as a Kubernetes-native registry.
-spec:
-  capabilities:
-    - safe-start
+spec: {}

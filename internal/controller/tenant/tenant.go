@@ -51,16 +51,6 @@ const (
 	errDuplicateTenant = "tenant with this tenantId already exists"
 )
 
-// SetupGated adds a controller that reconciles Tenant managed resources with safe-start support.
-func SetupGated(mgr ctrl.Manager, o controller.Options) error {
-	o.Gate.Register(func() {
-		if err := Setup(mgr, o); err != nil {
-			panic(errors.Wrap(err, "cannot setup Tenant controller"))
-		}
-	}, v1alpha1.TenantGroupVersionKind)
-	return nil
-}
-
 // Setup adds a controller that reconciles Tenant managed resources.
 func Setup(mgr ctrl.Manager, o controller.Options) error {
 	name := managed.ControllerName(v1alpha1.TenantGroupKind)
