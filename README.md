@@ -426,6 +426,24 @@ export type=MyResource
 make provider.addtype provider=${provider_name} group=${group} kind=${type}
 ```
 
+## Publishing
+
+### Publish the Package
+
+Build and publish the provider package to the xpkg registry:
+
+```bash
+make build.all publish.artifacts XPKG_REG_ORGS=xpkg.upbound.io/loafoe
+```
+
+### Update the Image
+
+After publishing, append extension metadata to the published image:
+
+```bash
+up alpha xpkg append --extensions-root=./extensions xpkg.upbound.io/loafoe/provider-orgmapper:v0.7.0
+```
+
 ## Troubleshooting
 
 ### Tenant stuck in "Syncing" state
