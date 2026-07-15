@@ -20,6 +20,7 @@ package apis
 import (
 	"k8s.io/apimachinery/pkg/runtime"
 
+	clusterv1alpha1 "github.com/loafoe/provider-orgmapper/apis/cluster/v1alpha1"
 	tenantv1alpha1 "github.com/loafoe/provider-orgmapper/apis/tenant/v1alpha1"
 	orgmapperv1alpha1 "github.com/loafoe/provider-orgmapper/apis/v1alpha1"
 )
@@ -28,6 +29,7 @@ func init() {
 	// Register the types with the Scheme so the components can map objects to GroupVersionKinds and back
 	AddToSchemes = append(AddToSchemes,
 		orgmapperv1alpha1.SchemeBuilder.AddToScheme,
+		clusterv1alpha1.SchemeBuilder.AddToScheme,
 		tenantv1alpha1.SchemeBuilder.AddToScheme,
 	)
 }

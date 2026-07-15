@@ -1,0 +1,12 @@
+apiVersion: orgmapper.crossplane.io/v1alpha1
+kind: ClusterProviderConfig
+metadata:
+  name: default
+spec:
+  grafanaUrl: "https://gf.obs-us-east-ct.hsp.philips.com"
+  credentials:
+    source: Secret
+    secretRef:
+      namespace: crossplane-system
+      name: grafana-basic-auth
+      key: credentials

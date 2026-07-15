@@ -24,6 +24,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/v2/pkg/resource"
 	ctrl "sigs.k8s.io/controller-runtime"
 
+	clusterv1alpha1 "github.com/loafoe/provider-orgmapper/apis/cluster/v1alpha1"
 	"github.com/loafoe/provider-orgmapper/apis/v1alpha1"
 )
 
@@ -58,11 +59,11 @@ func setupNamespacedProviderConfig(mgr ctrl.Manager, o controller.Options) error
 }
 
 func setupClusterProviderConfig(mgr ctrl.Manager, o controller.Options) error {
-	name := providerconfig.ControllerName(v1alpha1.ClusterProviderConfigGroupKind)
+	name := providerconfig.ControllerName(clusterv1alpha1.ClusterProviderConfigGroupKind)
 	of := resource.ProviderConfigKinds{
-		Config:    v1alpha1.ClusterProviderConfigGroupVersionKind,
-		Usage:     v1alpha1.ClusterProviderConfigUsageGroupVersionKind,
-		UsageList: v1alpha1.ClusterProviderConfigUsageListGroupVersionKind,
+		Config:    clusterv1alpha1.ClusterProviderConfigGroupVersionKind,
+		Usage:     clusterv1alpha1.ClusterProviderConfigUsageGroupVersionKind,
+		UsageList: clusterv1alpha1.ClusterProviderConfigUsageListGroupVersionKind,
 	}
 
 	r := providerconfig.NewReconciler(mgr, of,
@@ -72,7 +73,7 @@ func setupClusterProviderConfig(mgr ctrl.Manager, o controller.Options) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(name).
 		WithOptions(o.ForControllerRuntime()).
-		For(&v1alpha1.ClusterProviderConfig{}).
-		Watches(&v1alpha1.ClusterProviderConfigUsage{}, &resource.EnqueueRequestForProviderConfig{}).
+		For(&clusterv1alpha1.ClusterProviderConfig{}).
+		Watches(&clusterv1alpha1.ClusterProviderConfigUsage{}, &resource.EnqueueRequestForProviderConfig{}).
 		Complete(ratelimiter.NewReconciler(name, r, o.GlobalRateLimiter))
 }

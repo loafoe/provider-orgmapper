@@ -135,7 +135,7 @@ stringData:
 Then update your ProviderConfig to reference this secret key:
 
 ```yaml
-apiVersion: orgmapper.crossplane.io/v1alpha1
+apiVersion: orgmapper.m.crossplane.io/v1alpha1
 kind: ProviderConfig
 metadata:
   name: default
@@ -155,7 +155,7 @@ spec:
 Create a `ProviderConfig` to connect to your Grafana instance:
 
 ```yaml
-apiVersion: orgmapper.crossplane.io/v1alpha1
+apiVersion: orgmapper.m.crossplane.io/v1alpha1
 kind: ProviderConfig
 metadata:
   name: default
@@ -192,7 +192,7 @@ spec:
 Define tenants as Kubernetes resources:
 
 ```yaml
-apiVersion: tenant.orgmapper.crossplane.io/v1alpha1
+apiVersion: tenant.orgmapper.m.crossplane.io/v1alpha1
 kind: Tenant
 metadata:
   name: acme-corp
@@ -296,7 +296,7 @@ Retention values support the following suffixes:
 
 ```yaml
 # Production tenant with long retention
-apiVersion: tenant.orgmapper.crossplane.io/v1alpha1
+apiVersion: tenant.orgmapper.m.crossplane.io/v1alpha1
 kind: Tenant
 metadata:
   name: myapp-prod
@@ -317,7 +317,7 @@ spec:
     name: default
 ---
 # Staging tenant with shorter retention
-apiVersion: tenant.orgmapper.crossplane.io/v1alpha1
+apiVersion: tenant.orgmapper.m.crossplane.io/v1alpha1
 kind: Tenant
 metadata:
   name: myapp-staging
@@ -341,7 +341,7 @@ spec:
 ### Team-Based Access Control
 
 ```yaml
-apiVersion: tenant.orgmapper.crossplane.io/v1alpha1
+apiVersion: tenant.orgmapper.m.crossplane.io/v1alpha1
 kind: Tenant
 metadata:
   name: platform-team

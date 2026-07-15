@@ -36,6 +36,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/v2/pkg/resource"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/statemetrics"
 
+	clusterv1alpha1 "github.com/loafoe/provider-orgmapper/apis/cluster/v1alpha1"
 	v1alpha1 "github.com/loafoe/provider-orgmapper/apis/tenant/v1alpha1"
 	apisv1alpha1 "github.com/loafoe/provider-orgmapper/apis/v1alpha1"
 	"github.com/loafoe/provider-orgmapper/internal/grafana"
@@ -159,8 +160,8 @@ func (c *connector) extractConfig(ctx context.Context, cr *v1alpha1.Tenant) (str
 		return pc.Spec.GrafanaURL, data, nil
 	}
 
-	if kind == apisv1alpha1.ClusterProviderConfigKind {
-		pc := &apisv1alpha1.ClusterProviderConfig{}
+	if kind == clusterv1alpha1.ClusterProviderConfigKind {
+		pc := &clusterv1alpha1.ClusterProviderConfig{}
 		if err := c.kube.Get(ctx, client.ObjectKey{Name: ref.Name}, pc); err != nil {
 			return "", nil, errors.Wrap(err, errGetPC)
 		}

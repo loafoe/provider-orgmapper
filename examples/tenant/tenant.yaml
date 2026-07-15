@@ -1,4 +1,4 @@
-apiVersion: tenant.orgmapper.crossplane.io/v1alpha1
+apiVersion: tenant.orgmapper.m.crossplane.io/v1alpha1
 kind: Tenant
 metadata:
   name: acme-corp

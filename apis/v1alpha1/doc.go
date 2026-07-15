@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package v1alpha1 contains the core resources of the OrgMapper provider.
+// Package v1alpha1 contains the namespaced resources of the OrgMapper provider.
 // +kubebuilder:object:generate=true
-// +groupName=orgmapper.crossplane.io
+// +groupName=orgmapper.m.crossplane.io
 // +versionName=v1alpha1
 package v1alpha1
