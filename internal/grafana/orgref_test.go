@@ -1,4 +1,19 @@
-// internal/grafana/orgref_test.go
+/*
+Copyright 2025 The Crossplane Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package grafana
 
 import (
@@ -71,6 +86,38 @@ func TestResolveOrganizationID(t *testing.T) {
 
 	t.Run("id is zero", func(t *testing.T) {
 		kube := clfake.NewClientBuilder().WithScheme(newOrgScheme()).WithObjects(newOrg("ns1", "acme-org", int64(0))).Build()
+		_, err := ResolveOrganizationID(ctx, kube, "ns1", "acme-org")
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+	})
+
+	t.Run("id is negative", func(t *testing.T) {
+		kube := clfake.NewClientBuilder().WithScheme(newOrgScheme()).WithObjects(newOrg("ns1", "acme-org", int64(-1))).Build()
+		_, err := ResolveOrganizationID(ctx, kube, "ns1", "acme-org")
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+	})
+
+	t.Run("malformed status shape", func(t *testing.T) {
+		org := &unstructured.Unstructured{}
+		org.SetGroupVersionKind(organizationGVK)
+		org.SetNamespace("ns1")
+		org.SetName("acme-org")
+		// status.atProvider is a scalar rather than a map, so traversing to
+		// status.atProvider.id fails with an accessor error rather than a
+		// simple "not found".
+		_ = unstructured.SetNestedField(org.Object, "not-a-map", "status", "atProvider")
+		kube := clfake.NewClientBuilder().WithScheme(newOrgScheme()).WithObjects(org).Build()
+		_, err := ResolveOrganizationID(ctx, kube, "ns1", "acme-org")
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+	})
+
+	t.Run("id has unexpected type", func(t *testing.T) {
+		kube := clfake.NewClientBuilder().WithScheme(newOrgScheme()).WithObjects(newOrg("ns1", "acme-org", "42")).Build()
 		_, err := ResolveOrganizationID(ctx, kube, "ns1", "acme-org")
 		if err == nil {
 			t.Fatal("expected error, got nil")

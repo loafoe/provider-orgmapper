@@ -1,11 +1,27 @@
+/*
+Copyright 2025 The Crossplane Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package grafana
 
 import (
 	"context"
 	"fmt"
 
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -31,7 +47,7 @@ func ResolveOrganizationID(ctx context.Context, kube client.Client, namespace, n
 		if apierrors.IsNotFound(err) {
 			return "", fmt.Errorf("organization %q not found in namespace %q: %w", name, namespace, err)
 		}
-		return "", fmt.Errorf("cannot get organization %q: %w", name, err)
+		return "", fmt.Errorf("cannot get organization %q in namespace %q: %w", name, namespace, err)
 	}
 
 	val, found, err := unstructured.NestedFieldNoCopy(u.Object, "status", "atProvider", "id")
@@ -51,8 +67,8 @@ func ResolveOrganizationID(ctx context.Context, kube client.Client, namespace, n
 	default:
 		return "", fmt.Errorf("organization %q status.atProvider.id has unexpected type %T", name, val)
 	}
-	if id == 0 {
-		return "", fmt.Errorf("organization %q has not been assigned an id yet", name)
+	if id <= 0 {
+		return "", fmt.Errorf("organization %q has not been assigned a valid id yet (got %d)", name, id)
 	}
 
 	return fmt.Sprintf("%d", id), nil
