@@ -237,6 +237,26 @@ func TestObserve(t *testing.T) {
 				},
 			},
 		},
+		"OrganizationRefNotYetResolvable": {
+			reason: "Should return ResourceUpToDate false when organizationRef can't be resolved yet.",
+			sso:    defaultMockSSO(),
+			args: args{
+				ctx: context.Background(),
+				mg: func() resource.Managed {
+					cr := tenantWithRef("acme", "acme-org", retention)
+					meta.SetExternalName(cr, "acme")
+					cr.Status.AtProvider = v1alpha1.TenantObservation{
+						TenantID:    "acme",
+						Retention:   retention,
+						LastUpdated: "2025-01-01T00:00:00Z",
+					}
+					return cr
+				}(),
+			},
+			want: want{
+				o: managed.ExternalObservation{ResourceExists: true, ResourceUpToDate: false},
+			},
+		},
 		"NotATenant": {
 			reason: "Should return an error if the managed resource is not a Tenant.",
 			sso:    defaultMockSSO(),
@@ -647,7 +667,7 @@ func TestIsUpToDate(t *testing.T) {
 
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			got := isUpToDate(tc.cr)
+			got := isUpToDate(tc.cr, tc.cr.Spec.ForProvider.OrgID)
 			if got != tc.want {
 				t.Errorf("\n%s\nisUpToDate(...): want %v, got %v", tc.reason, tc.want, got)
 			}
