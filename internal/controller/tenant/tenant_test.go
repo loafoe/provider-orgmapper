@@ -348,6 +348,51 @@ func TestCreate(t *testing.T) {
 	}
 }
 
+func TestResolveOrgID(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("literal orgId wins when set", func(t *testing.T) {
+		cr := tenantWithSpec("acme", "org-1", nil, v1alpha1.RetentionPolicy{})
+		e := external{kube: newFakeKube(), logger: logging.NewNopLogger()}
+		got, err := e.resolveOrgID(ctx, cr)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != "org-1" {
+			t.Errorf("got %q, want %q", got, "org-1")
+		}
+	})
+
+	t.Run("both orgId and organizationRef set is an error", func(t *testing.T) {
+		cr := tenantWithSpec("acme", "org-1", nil, v1alpha1.RetentionPolicy{})
+		cr.Spec.ForProvider.OrganizationRef = &v1alpha1.OrganizationReference{Name: "acme-org"}
+		e := external{kube: newFakeKube(), logger: logging.NewNopLogger()}
+		_, err := e.resolveOrgID(ctx, cr)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+	})
+
+	t.Run("neither orgId nor organizationRef set is an error", func(t *testing.T) {
+		cr := tenantWithSpec("acme", "", nil, v1alpha1.RetentionPolicy{})
+		e := external{kube: newFakeKube(), logger: logging.NewNopLogger()}
+		_, err := e.resolveOrgID(ctx, cr)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+	})
+
+	t.Run("organizationRef not resolvable is an error", func(t *testing.T) {
+		cr := tenantWithSpec("acme", "", nil, v1alpha1.RetentionPolicy{})
+		cr.Spec.ForProvider.OrganizationRef = &v1alpha1.OrganizationReference{Name: "acme-org"}
+		e := external{kube: newFakeKube(), logger: logging.NewNopLogger()}
+		_, err := e.resolveOrgID(ctx, cr)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+	})
+}
+
 func TestUpdate(t *testing.T) {
 	type args struct {
 		ctx context.Context

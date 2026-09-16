@@ -50,6 +50,9 @@ const (
 	errNewClient       = "cannot create Grafana client"
 	errListTenants     = "cannot list Tenants"
 	errDuplicateTenant = "tenant with this tenantId already exists"
+	errOrgIDConflict   = "exactly one of orgId or organizationRef must be set, not both"
+	errOrgIDMissing    = "exactly one of orgId or organizationRef must be set"
+	errResolveOrgID    = "cannot resolve organization id"
 )
 
 // Setup adds a controller that reconciles Tenant managed resources.
@@ -134,6 +137,30 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.E
 		sso:    gClient.SsoSettings,
 		logger: c.logger,
 	}, nil
+}
+
+// resolveOrgID returns the effective Grafana org ID for cr: the literal
+// OrgID if set, otherwise the ID resolved from OrganizationRef. Exactly one
+// of the two must be set.
+func (c *external) resolveOrgID(ctx context.Context, cr *v1alpha1.Tenant) (string, error) {
+	hasLiteral := cr.Spec.ForProvider.OrgID != ""
+	hasRef := cr.Spec.ForProvider.OrganizationRef != nil
+
+	if hasLiteral && hasRef {
+		return "", errors.New(errOrgIDConflict)
+	}
+	if !hasLiteral && !hasRef {
+		return "", errors.New(errOrgIDMissing)
+	}
+	if hasLiteral {
+		return cr.Spec.ForProvider.OrgID, nil
+	}
+
+	id, err := grafana.ResolveOrganizationID(ctx, c.kube, cr.GetNamespace(), cr.Spec.ForProvider.OrganizationRef.Name)
+	if err != nil {
+		return "", errors.Wrap(err, errResolveOrgID)
+	}
+	return id, nil
 }
 
 // extractConfig reads the ProviderConfig (namespaced or cluster-scoped) and
