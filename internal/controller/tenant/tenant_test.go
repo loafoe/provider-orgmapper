@@ -22,7 +22,9 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	clfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -89,6 +91,16 @@ func tenantWithSpec(tenantID, orgID string, admins []string, retention v1alpha1.
 		OrgID:     orgID,
 		Admins:    admins,
 		Retention: retention,
+	}
+	return t
+}
+
+func tenantWithRef(tenantID, orgName string, retention v1alpha1.RetentionPolicy) *v1alpha1.Tenant {
+	t := &v1alpha1.Tenant{}
+	t.Spec.ForProvider = v1alpha1.TenantParameters{
+		TenantID:        tenantID,
+		OrganizationRef: &v1alpha1.OrganizationReference{Name: orgName},
+		Retention:       retention,
 	}
 	return t
 }
@@ -316,6 +328,30 @@ func TestCreate(t *testing.T) {
 				err: errors.New("tenant with this tenantId already exists: acme"),
 			},
 		},
+		"OrganizationRefResolved": {
+			reason: "Should resolve organizationRef and use it as the effective orgId.",
+			kube: func() client.Client {
+				scheme := runtime.NewScheme()
+				_ = v1alpha1.SchemeBuilder.AddToScheme(scheme)
+				scheme.AddKnownTypeWithName(
+					schema.GroupVersionKind{Group: "oss.gf.m.crossplane.io", Version: "v1alpha1", Kind: "Organization"},
+					&unstructured.Unstructured{},
+				)
+				org := &unstructured.Unstructured{}
+				org.SetGroupVersionKind(schema.GroupVersionKind{Group: "oss.gf.m.crossplane.io", Version: "v1alpha1", Kind: "Organization"})
+				org.SetName("acme-org")
+				_ = unstructured.SetNestedField(org.Object, int64(99), "status", "atProvider", "id")
+				return clfake.NewClientBuilder().WithScheme(scheme).WithObjects(org).Build()
+			}(),
+			sso: defaultMockSSO(),
+			args: args{
+				ctx: context.Background(),
+				mg:  tenantWithRef("acme", "acme-org", retention),
+			},
+			want: want{
+				o: managed.ExternalCreation{},
+			},
+		},
 	}
 
 	for name, tc := range cases {
@@ -341,6 +377,9 @@ func TestCreate(t *testing.T) {
 					}
 					if cr.Status.AtProvider.LastUpdated == "" {
 						t.Errorf("\n%s\ne.Create(...): expected lastUpdated to be set", tc.reason)
+					}
+					if cr.Spec.ForProvider.OrganizationRef != nil && cr.Status.AtProvider.OrgID != "99" {
+						t.Errorf("\n%s\ne.Create(...): expected status orgId %q, got %q", tc.reason, "99", cr.Status.AtProvider.OrgID)
 					}
 				}
 			}

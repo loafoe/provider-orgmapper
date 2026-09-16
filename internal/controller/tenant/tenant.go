@@ -274,8 +274,13 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 		return managed.ExternalCreation{}, err
 	}
 
+	orgID, err := c.resolveOrgID(ctx, cr)
+	if err != nil {
+		return managed.ExternalCreation{}, err
+	}
+
 	meta.SetExternalName(cr, cr.Spec.ForProvider.TenantID)
-	syncStatus(cr)
+	syncStatus(cr, orgID)
 
 	// Grafana sync must succeed for Create - this ensures the tenant is
 	// properly registered in Grafana's org_mapping before the resource is Ready.
@@ -292,7 +297,12 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 		return managed.ExternalUpdate{}, errors.New(errNotTenant)
 	}
 
-	syncStatus(cr)
+	orgID, err := c.resolveOrgID(ctx, cr)
+	if err != nil {
+		c.logger.Info("Failed to resolve organization id", "error", err)
+		orgID = cr.Status.AtProvider.OrgID // keep last known value
+	}
+	syncStatus(cr, orgID)
 
 	// Grafana sync is best-effort; log errors but don't block resource updates.
 	// The CR itself is the source of truth for this resource type.
@@ -337,8 +347,13 @@ func (c *external) syncGrafanaOrgMapping(ctx context.Context, cr *v1alpha1.Tenan
 		if deleting && t.GetUID() == cr.GetUID() {
 			continue
 		}
+		orgID, err := c.resolveOrgID(ctx, t)
+		if err != nil {
+			c.logger.Debug("Skipping tenant with unresolved org id", "tenant", t.GetName(), "error", err)
+			continue
+		}
 		mappings = append(mappings, grafana.TenantMapping{
-			OrgID:        t.Spec.ForProvider.OrgID,
+			OrgID:        orgID,
 			ViewerGroups: t.Spec.ForProvider.ViewerGroups,
 			EditorGroups: t.Spec.ForProvider.EditorGroups,
 			AdminGroups:  t.Spec.ForProvider.AdminGroups,
@@ -402,10 +417,12 @@ func (c *external) isGrafanaDrifted(cr *v1alpha1.Tenant) (bool, error) {
 }
 
 // syncStatus copies spec fields into status and sets the lastUpdated timestamp.
-func syncStatus(cr *v1alpha1.Tenant) {
+// resolvedOrgID is the effective org ID (literal or resolved from a ref).
+func syncStatus(cr *v1alpha1.Tenant, resolvedOrgID string) {
 	cr.Status.AtProvider = v1alpha1.TenantObservation{
 		TenantID:     cr.Spec.ForProvider.TenantID,
-		OrgID:        cr.Spec.ForProvider.OrgID,
+		OrgID:        resolvedOrgID,
+		DisplayName:  cr.Spec.ForProvider.DisplayName,
 		Admins:       cr.Spec.ForProvider.Admins,
 		ViewerGroups: cr.Spec.ForProvider.ViewerGroups,
 		EditorGroups: cr.Spec.ForProvider.EditorGroups,
