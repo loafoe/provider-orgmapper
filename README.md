@@ -263,9 +263,7 @@ kubectl describe tenant acme-corp
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `spec.forProvider.tenantId` | string | Yes | Unique identifier for the tenant |
-| `spec.forProvider.orgId` | string | One of orgId/organizationRef | Grafana organization ID (use when the org already exists) |
-| `spec.forProvider.organizationRef.name` | string | One of orgId/organizationRef | Name of a provider-gf `Organization` resource to resolve the org ID from |
-| `spec.forProvider.displayName` | string | No | Human-readable org name; not acted on directly, passed through to status for callers that create the paired Organization |
+| `spec.forProvider.orgId` | string | Yes | Grafana organization ID |
 | `spec.forProvider.admins` | []string | No | List of tenant administrators |
 | `spec.forProvider.viewerGroups` | []string | No | Groups with Viewer role |
 | `spec.forProvider.editorGroups` | []string | No | Groups with Editor role |
@@ -274,16 +272,6 @@ kubectl describe tenant acme-corp
 | `spec.forProvider.retention.metrics` | string | No | Metrics retention |
 | `spec.forProvider.retention.traces` | string | No | Traces retention |
 | `spec.forProvider.retention.profiles` | string | No | Profiles retention |
-
-### Org ID resolution
-
-A Tenant needs exactly one of:
-- `orgId` — a literal Grafana organization ID, for orgs that already exist.
-- `organizationRef.name` — the name of a `provider-gf` `Organization` resource
-  (in the same namespace) whose Grafana-assigned ID should be used once
-  provider-gf finishes creating it. `provider-orgmapper` does not create
-  Grafana orgs itself; it resolves this reference by reading the
-  Organization's `status.atProvider.id`.
 
 ### ProviderConfig
 

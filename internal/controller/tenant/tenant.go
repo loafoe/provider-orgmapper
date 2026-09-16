@@ -50,9 +50,6 @@ const (
 	errNewClient       = "cannot create Grafana client"
 	errListTenants     = "cannot list Tenants"
 	errDuplicateTenant = "tenant with this tenantId already exists"
-	errOrgIDConflict   = "exactly one of orgId or organizationRef must be set, not both"
-	errOrgIDMissing    = "neither orgId nor organizationRef is set; exactly one is required"
-	errResolveOrgID    = "cannot resolve organization id"
 )
 
 // Setup adds a controller that reconciles Tenant managed resources.
@@ -139,34 +136,6 @@ func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.E
 	}, nil
 }
 
-// resolveOrgID returns the effective Grafana org ID for cr: the literal
-// OrgID if set, otherwise the ID resolved from OrganizationRef. Exactly one
-// of the two must be set.
-func (c *external) resolveOrgID(ctx context.Context, cr *v1alpha1.Tenant) (string, error) {
-	hasLiteral := cr.Spec.ForProvider.OrgID != ""
-	hasRef := cr.Spec.ForProvider.OrganizationRef != nil
-
-	if hasLiteral && hasRef {
-		return "", errors.New(errOrgIDConflict)
-	}
-	if !hasLiteral && !hasRef {
-		return "", errors.New(errOrgIDMissing)
-	}
-	if hasLiteral {
-		return cr.Spec.ForProvider.OrgID, nil
-	}
-
-	if c.kube == nil {
-		return "", errors.New(errResolveOrgID + ": no kube client available")
-	}
-
-	id, err := grafana.ResolveOrganizationID(ctx, c.kube, cr.GetNamespace(), cr.Spec.ForProvider.OrganizationRef.Name)
-	if err != nil {
-		return "", errors.Wrap(err, errResolveOrgID)
-	}
-	return id, nil
-}
-
 // extractConfig reads the ProviderConfig (namespaced or cluster-scoped) and
 // returns the Grafana URL and raw credential bytes.
 func (c *connector) extractConfig(ctx context.Context, cr *v1alpha1.Tenant) (string, []byte, error) {
@@ -240,17 +209,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	// Compare spec vs status to determine if an update is needed.
 	// The status is synced to spec during Create/Update and persisted by the
 	// managed reconciler.
-	orgID, err := c.resolveOrgID(ctx, cr)
-	if err != nil {
-		c.logger.Info("Failed to resolve organization id", "error", err)
-		cr.SetConditions(xpv1.Unavailable().WithMessage(err.Error()))
-		return managed.ExternalObservation{
-			ResourceExists:   true,
-			ResourceUpToDate: false,
-		}, nil
-	}
-
-	upToDate := isUpToDate(cr, orgID)
+	upToDate := isUpToDate(cr)
 
 	// For virtual resources, explicitly set the Available condition when the
 	// CR state is consistent (spec == status). This ensures the Ready status
@@ -262,7 +221,7 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 		// If drift is detected, trigger an Update to resync Grafana.
 		// Errors during drift check are logged but don't affect Ready state -
 		// this prevents infinite loops when Grafana is temporarily unreachable.
-		drifted, err := c.isGrafanaDrifted(cr, orgID)
+		drifted, err := c.isGrafanaDrifted(cr)
 		if err != nil {
 			c.logger.Debug("Failed to check Grafana drift", "error", err)
 		} else if drifted {
@@ -288,13 +247,8 @@ func (c *external) Create(ctx context.Context, mg resource.Managed) (managed.Ext
 		return managed.ExternalCreation{}, err
 	}
 
-	orgID, err := c.resolveOrgID(ctx, cr)
-	if err != nil {
-		return managed.ExternalCreation{}, err
-	}
-
 	meta.SetExternalName(cr, cr.Spec.ForProvider.TenantID)
-	syncStatus(cr, orgID)
+	syncStatus(cr)
 
 	// Grafana sync must succeed for Create - this ensures the tenant is
 	// properly registered in Grafana's org_mapping before the resource is Ready.
@@ -311,12 +265,7 @@ func (c *external) Update(ctx context.Context, mg resource.Managed) (managed.Ext
 		return managed.ExternalUpdate{}, errors.New(errNotTenant)
 	}
 
-	orgID, err := c.resolveOrgID(ctx, cr)
-	if err != nil {
-		c.logger.Info("Failed to resolve organization id", "error", err)
-		orgID = cr.Status.AtProvider.OrgID // keep last known value
-	}
-	syncStatus(cr, orgID)
+	syncStatus(cr)
 
 	// Grafana sync is best-effort; log errors but don't block resource updates.
 	// The CR itself is the source of truth for this resource type.
@@ -361,18 +310,8 @@ func (c *external) syncGrafanaOrgMapping(ctx context.Context, cr *v1alpha1.Tenan
 		if deleting && t.GetUID() == cr.GetUID() {
 			continue
 		}
-		orgID, err := c.resolveOrgID(ctx, t)
-		if err != nil {
-			if last := t.Status.AtProvider.OrgID; last != "" {
-				c.logger.Info("Using last known org id for tenant", "tenant", t.GetName(), "error", err)
-				orgID = last
-			} else {
-				c.logger.Info("Skipping tenant with unresolved org id", "tenant", t.GetName(), "error", err)
-				continue
-			}
-		}
 		mappings = append(mappings, grafana.TenantMapping{
-			OrgID:        orgID,
+			OrgID:        t.Spec.ForProvider.OrgID,
 			ViewerGroups: t.Spec.ForProvider.ViewerGroups,
 			EditorGroups: t.Spec.ForProvider.EditorGroups,
 			AdminGroups:  t.Spec.ForProvider.AdminGroups,
@@ -408,10 +347,9 @@ func (c *external) validateUniqueTenantID(ctx context.Context, cr *v1alpha1.Tena
 	return nil
 }
 
-// isGrafanaDrifted checks whether resolvedOrgID's org_mapping entries are
-// present in the Grafana SSO settings. Returns true if missing from the
-// mapping.
-func (c *external) isGrafanaDrifted(cr *v1alpha1.Tenant, resolvedOrgID string) (bool, error) {
+// isGrafanaDrifted checks whether this tenant's org_mapping entries are present in
+// the Grafana SSO settings. Returns true if the tenant is missing from the mapping.
+func (c *external) isGrafanaDrifted(cr *v1alpha1.Tenant) (bool, error) {
 	// If the tenant has no groups, there's nothing to check in Grafana.
 	// No entries will be generated, so we consider it "not drifted".
 	if len(cr.Spec.ForProvider.ViewerGroups) == 0 && len(cr.Spec.ForProvider.EditorGroups) == 0 && len(cr.Spec.ForProvider.AdminGroups) == 0 {
@@ -433,16 +371,14 @@ func (c *external) isGrafanaDrifted(cr *v1alpha1.Tenant, resolvedOrgID string) (
 	}
 
 	orgMapping, _ := settings["orgMapping"].(string)
-	return !grafana.OrgMappingContains(orgMapping, resolvedOrgID), nil
+	return !grafana.OrgMappingContains(orgMapping, cr.Spec.ForProvider.OrgID), nil
 }
 
 // syncStatus copies spec fields into status and sets the lastUpdated timestamp.
-// resolvedOrgID is the effective org ID (literal or resolved from a ref).
-func syncStatus(cr *v1alpha1.Tenant, resolvedOrgID string) {
+func syncStatus(cr *v1alpha1.Tenant) {
 	cr.Status.AtProvider = v1alpha1.TenantObservation{
 		TenantID:     cr.Spec.ForProvider.TenantID,
-		OrgID:        resolvedOrgID,
-		DisplayName:  cr.Spec.ForProvider.DisplayName,
+		OrgID:        cr.Spec.ForProvider.OrgID,
 		Admins:       cr.Spec.ForProvider.Admins,
 		ViewerGroups: cr.Spec.ForProvider.ViewerGroups,
 		EditorGroups: cr.Spec.ForProvider.EditorGroups,
@@ -452,17 +388,15 @@ func syncStatus(cr *v1alpha1.Tenant, resolvedOrgID string) {
 	}
 }
 
-// isUpToDate compares spec.ForProvider against status.atProvider, using
-// resolvedOrgID (literal or resolved from organizationRef) in place of
-// spec.ForProvider.OrgID, which is empty when organizationRef is used.
-func isUpToDate(cr *v1alpha1.Tenant, resolvedOrgID string) bool {
+// isUpToDate compares spec.forProvider against status.atProvider.
+func isUpToDate(cr *v1alpha1.Tenant) bool {
 	spec := cr.Spec.ForProvider
 	obs := cr.Status.AtProvider
 
 	if spec.TenantID != obs.TenantID {
 		return false
 	}
-	if resolvedOrgID != obs.OrgID {
+	if spec.OrgID != obs.OrgID {
 		return false
 	}
 	if spec.Retention != obs.Retention {

@@ -78,13 +78,6 @@ spec:
                     items:
                       type: string
                     type: array
-                  displayName:
-                    description: |-
-                      DisplayName is a human-readable name for the tenant's Grafana org.
-                      Not acted on directly by this controller; it exists so callers (e.g.
-                      the Helm chart) can source the paired Organization's display name
-                      from the Tenant spec.
-                    type: string
                   editorGroups:
                     description: EditorGroups is a list of group claims that grant
                       Editor role in this tenant's Grafana org.
@@ -92,24 +85,9 @@ spec:
                       type: string
                     type: array
                   orgId:
-                    description: |-
-                      OrgID is the mapped organization identifier. Exactly one of OrgID or
-                      OrganizationRef must be set.
+                    description: OrgID is the mapped organization identifier.
+                    minLength: 1
                     type: string
-                  organizationRef:
-                    description: |-
-                      OrganizationRef references a provider-gf Organization in the same
-                      namespace whose Grafana-assigned org ID should be used. Exactly one
-                      of OrgID or OrganizationRef must be set.
-                    properties:
-                      name:
-                        description: Name is the name of the Organization managed
-                          resource.
-                        minLength: 1
-                        type: string
-                    required:
-                    - name
-                    type: object
                   retention:
                     description: Retention defines data retention settings for each
                       signal type.
@@ -142,6 +120,7 @@ spec:
                       type: string
                     type: array
                 required:
+                - orgId
                 - retention
                 - tenantId
                 type: object
@@ -217,8 +196,6 @@ spec:
                     items:
                       type: string
                     type: array
-                  displayName:
-                    type: string
                   editorGroups:
                     items:
                       type: string

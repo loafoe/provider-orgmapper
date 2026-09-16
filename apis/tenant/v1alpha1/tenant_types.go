@@ -33,23 +33,10 @@ type TenantParameters struct {
 	// +kubebuilder:validation:MinLength=1
 	TenantID string `json:"tenantId"`
 
-	// OrgID is the mapped organization identifier. Exactly one of OrgID or
-	// OrganizationRef must be set.
-	// +optional
-	OrgID string `json:"orgId,omitempty"`
-
-	// OrganizationRef references a provider-gf Organization in the same
-	// namespace whose Grafana-assigned org ID should be used. Exactly one
-	// of OrgID or OrganizationRef must be set.
-	// +optional
-	OrganizationRef *OrganizationReference `json:"organizationRef,omitempty"`
-
-	// DisplayName is a human-readable name for the tenant's Grafana org.
-	// Not acted on directly by this controller; it exists so callers (e.g.
-	// the Helm chart) can source the paired Organization's display name
-	// from the Tenant spec.
-	// +optional
-	DisplayName string `json:"displayName,omitempty"`
+	// OrgID is the mapped organization identifier.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	OrgID string `json:"orgId"`
 
 	// Admins is a list of tenant administrators (typically GitHub IDs).
 	// +optional
@@ -95,20 +82,10 @@ type RetentionPolicy struct {
 	Profiles string `json:"profiles,omitempty"`
 }
 
-// OrganizationReference identifies a provider-gf Organization managed
-// resource by name, in the same namespace as the referencing Tenant.
-type OrganizationReference struct {
-	// Name is the name of the Organization managed resource.
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
-	Name string `json:"name"`
-}
-
 // TenantObservation are the observable fields of a Tenant.
 type TenantObservation struct {
 	TenantID     string          `json:"tenantId,omitempty"`
 	OrgID        string          `json:"orgId,omitempty"`
-	DisplayName  string          `json:"displayName,omitempty"`
 	Admins       []string        `json:"admins,omitempty"`
 	ViewerGroups []string        `json:"viewerGroups,omitempty"`
 	EditorGroups []string        `json:"editorGroups,omitempty"`

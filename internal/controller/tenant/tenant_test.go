@@ -22,9 +22,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	clfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -41,36 +39,6 @@ import (
 	v1alpha1 "github.com/loafoe/provider-orgmapper/apis/tenant/v1alpha1"
 	"github.com/loafoe/provider-orgmapper/internal/grafana"
 )
-
-// organizationGVK mirrors the soft cross-provider contract in
-// internal/grafana/orgref.go, used here to build fake provider-gf
-// Organization objects for controller-level tests.
-var organizationGVK = schema.GroupVersionKind{Group: "oss.gf.m.crossplane.io", Version: "v1alpha1", Kind: "Organization"}
-
-// newOrgKube builds a fake client whose scheme has both the Tenant types and
-// the (unstructured) provider-gf Organization GVK registered, seeded with
-// the given objects. Use this instead of newFakeKube whenever a test needs
-// to exercise organizationRef resolution through a real kube client.
-func newOrgKube(objs ...client.Object) client.Client {
-	scheme := runtime.NewScheme()
-	_ = v1alpha1.SchemeBuilder.AddToScheme(scheme)
-	scheme.AddKnownTypeWithName(organizationGVK, &unstructured.Unstructured{})
-	scheme.AddKnownTypeWithName(organizationGVK.GroupVersion().WithKind("OrganizationList"), &unstructured.UnstructuredList{})
-	return clfake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build()
-}
-
-// newOrg builds an unstructured provider-gf Organization object. If id is
-// non-nil, status.atProvider.id is set to it.
-func newOrg(namespace, name string, id any) *unstructured.Unstructured {
-	u := &unstructured.Unstructured{}
-	u.SetGroupVersionKind(organizationGVK)
-	u.SetNamespace(namespace)
-	u.SetName(name)
-	if id != nil {
-		_ = unstructured.SetNestedField(u.Object, id, "status", "atProvider", "id")
-	}
-	return u
-}
 
 // mockSSO implements grafana.SSOClient for controller tests.
 type mockSSO struct {
@@ -125,16 +93,6 @@ func tenantWithSpec(tenantID, orgID string, admins []string, retention v1alpha1.
 	return t
 }
 
-func tenantWithRef(tenantID, orgName string, retention v1alpha1.RetentionPolicy) *v1alpha1.Tenant {
-	t := &v1alpha1.Tenant{}
-	t.Spec.ForProvider = v1alpha1.TenantParameters{
-		TenantID:        tenantID,
-		OrganizationRef: &v1alpha1.OrganizationReference{Name: orgName},
-		Retention:       retention,
-	}
-	return t
-}
-
 func newFakeKube(objs ...client.Object) client.Client {
 	scheme := runtime.NewScheme()
 	_ = v1alpha1.SchemeBuilder.AddToScheme(scheme)
@@ -162,7 +120,6 @@ func TestObserve(t *testing.T) {
 
 	cases := map[string]struct {
 		reason string
-		kube   client.Client
 		sso    *mockSSO
 		args   args
 		want   want
@@ -268,31 +225,6 @@ func TestObserve(t *testing.T) {
 				},
 			},
 		},
-		"OrganizationRefNotYetResolvable": {
-			reason: "Should return ResourceUpToDate false when the referenced Organization exists but provider-gf hasn't assigned status.atProvider.id yet.",
-			// A real, scheme-registered kube client with the Organization
-			// present but not-ready, so this exercises the actual
-			// resolution path through the controller rather than the
-			// defensive c.kube == nil guard (unreachable in production).
-			kube: newOrgKube(newOrg("", "acme-org", nil)),
-			sso:  defaultMockSSO(),
-			args: args{
-				ctx: context.Background(),
-				mg: func() resource.Managed {
-					cr := tenantWithRef("acme", "acme-org", retention)
-					meta.SetExternalName(cr, "acme")
-					cr.Status.AtProvider = v1alpha1.TenantObservation{
-						TenantID:    "acme",
-						Retention:   retention,
-						LastUpdated: "2025-01-01T00:00:00Z",
-					}
-					return cr
-				}(),
-			},
-			want: want{
-				o: managed.ExternalObservation{ResourceExists: true, ResourceUpToDate: false},
-			},
-		},
 		"NotATenant": {
 			reason: "Should return an error if the managed resource is not a Tenant.",
 			sso:    defaultMockSSO(),
@@ -308,7 +240,7 @@ func TestObserve(t *testing.T) {
 
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			e := external{kube: tc.kube, sso: tc.sso, logger: logging.NewNopLogger()}
+			e := external{sso: tc.sso, logger: logging.NewNopLogger()}
 			got, err := e.Observe(tc.args.ctx, tc.args.mg)
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
 				t.Errorf("\n%s\ne.Observe(...): -want error, +got error:\n%s\n", tc.reason, diff)
@@ -384,30 +316,6 @@ func TestCreate(t *testing.T) {
 				err: errors.New("tenant with this tenantId already exists: acme"),
 			},
 		},
-		"OrganizationRefResolved": {
-			reason: "Should resolve organizationRef and use it as the effective orgId.",
-			kube: func() client.Client {
-				scheme := runtime.NewScheme()
-				_ = v1alpha1.SchemeBuilder.AddToScheme(scheme)
-				scheme.AddKnownTypeWithName(
-					schema.GroupVersionKind{Group: "oss.gf.m.crossplane.io", Version: "v1alpha1", Kind: "Organization"},
-					&unstructured.Unstructured{},
-				)
-				org := &unstructured.Unstructured{}
-				org.SetGroupVersionKind(schema.GroupVersionKind{Group: "oss.gf.m.crossplane.io", Version: "v1alpha1", Kind: "Organization"})
-				org.SetName("acme-org")
-				_ = unstructured.SetNestedField(org.Object, int64(99), "status", "atProvider", "id")
-				return clfake.NewClientBuilder().WithScheme(scheme).WithObjects(org).Build()
-			}(),
-			sso: defaultMockSSO(),
-			args: args{
-				ctx: context.Background(),
-				mg:  tenantWithRef("acme", "acme-org", retention),
-			},
-			want: want{
-				o: managed.ExternalCreation{},
-			},
-		},
 	}
 
 	for name, tc := range cases {
@@ -434,61 +342,10 @@ func TestCreate(t *testing.T) {
 					if cr.Status.AtProvider.LastUpdated == "" {
 						t.Errorf("\n%s\ne.Create(...): expected lastUpdated to be set", tc.reason)
 					}
-					if cr.Spec.ForProvider.OrganizationRef != nil && cr.Status.AtProvider.OrgID != "99" {
-						t.Errorf("\n%s\ne.Create(...): expected status orgId %q, got %q", tc.reason, "99", cr.Status.AtProvider.OrgID)
-					}
 				}
 			}
 		})
 	}
-}
-
-func TestResolveOrgID(t *testing.T) {
-	ctx := context.Background()
-
-	t.Run("literal orgId wins when set", func(t *testing.T) {
-		cr := tenantWithSpec("acme", "org-1", nil, v1alpha1.RetentionPolicy{})
-		e := external{kube: newFakeKube(), logger: logging.NewNopLogger()}
-		got, err := e.resolveOrgID(ctx, cr)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if got != "org-1" {
-			t.Errorf("got %q, want %q", got, "org-1")
-		}
-	})
-
-	t.Run("both orgId and organizationRef set is an error", func(t *testing.T) {
-		cr := tenantWithSpec("acme", "org-1", nil, v1alpha1.RetentionPolicy{})
-		cr.Spec.ForProvider.OrganizationRef = &v1alpha1.OrganizationReference{Name: "acme-org"}
-		e := external{kube: newFakeKube(), logger: logging.NewNopLogger()}
-		_, err := e.resolveOrgID(ctx, cr)
-		if err == nil {
-			t.Fatal("expected error, got nil")
-		}
-	})
-
-	t.Run("neither orgId nor organizationRef set is an error", func(t *testing.T) {
-		cr := tenantWithSpec("acme", "", nil, v1alpha1.RetentionPolicy{})
-		e := external{kube: newFakeKube(), logger: logging.NewNopLogger()}
-		_, err := e.resolveOrgID(ctx, cr)
-		if err == nil {
-			t.Fatal("expected error, got nil")
-		}
-	})
-
-	t.Run("organizationRef not resolvable is an error", func(t *testing.T) {
-		// Use a properly scheme-registered kube client with no Organization
-		// object present, so this exercises the real NotFound path rather
-		// than a scheme/no-kind error from an unregistered GVK.
-		cr := tenantWithSpec("acme", "", nil, v1alpha1.RetentionPolicy{})
-		cr.Spec.ForProvider.OrganizationRef = &v1alpha1.OrganizationReference{Name: "acme-org"}
-		e := external{kube: newOrgKube(), logger: logging.NewNopLogger()}
-		_, err := e.resolveOrgID(ctx, cr)
-		if err == nil {
-			t.Fatal("expected error, got nil")
-		}
-	})
 }
 
 func TestUpdate(t *testing.T) {
@@ -557,32 +414,6 @@ func TestUpdate(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-// TestUpdateFallsBackToLastKnownOrgID pins the intended semantics of
-// Update's best-effort resolution: if a ref-mode Tenant's organizationRef
-// can no longer be resolved (e.g. a transient error, or the Organization
-// was removed), Update must not blank out the previously resolved org ID -
-// it should keep applying the last known value rather than erasing it.
-func TestUpdateFallsBackToLastKnownOrgID(t *testing.T) {
-	cr := tenantWithRef("acme", "acme-org", v1alpha1.RetentionPolicy{})
-	meta.SetExternalName(cr, "acme")
-	cr.Status.AtProvider = v1alpha1.TenantObservation{
-		TenantID:    "acme",
-		OrgID:       "99",
-		LastUpdated: "2025-01-01T00:00:00Z",
-	}
-
-	// No Organization object present, so resolution fails.
-	e := external{kube: newOrgKube(), sso: defaultMockSSO("99"), logger: logging.NewNopLogger()}
-
-	_, err := e.Update(context.Background(), cr)
-	if err != nil {
-		t.Fatalf("e.Update(...): unexpected error: %v", err)
-	}
-	if cr.Status.AtProvider.OrgID != "99" {
-		t.Errorf("e.Update(...): expected status orgId to remain %q, got %q", "99", cr.Status.AtProvider.OrgID)
 	}
 }
 
@@ -732,7 +563,7 @@ func TestIsUpToDate(t *testing.T) {
 
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			got := isUpToDate(tc.cr, tc.cr.Spec.ForProvider.OrgID)
+			got := isUpToDate(tc.cr)
 			if got != tc.want {
 				t.Errorf("\n%s\nisUpToDate(...): want %v, got %v", tc.reason, tc.want, got)
 			}
