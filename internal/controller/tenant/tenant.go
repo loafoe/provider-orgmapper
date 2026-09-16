@@ -51,7 +51,7 @@ const (
 	errListTenants     = "cannot list Tenants"
 	errDuplicateTenant = "tenant with this tenantId already exists"
 	errOrgIDConflict   = "exactly one of orgId or organizationRef must be set, not both"
-	errOrgIDMissing    = "exactly one of orgId or organizationRef must be set"
+	errOrgIDMissing    = "neither orgId nor organizationRef is set; exactly one is required"
 	errResolveOrgID    = "cannot resolve organization id"
 )
 
@@ -242,7 +242,8 @@ func (c *external) Observe(ctx context.Context, mg resource.Managed) (managed.Ex
 	// managed reconciler.
 	orgID, err := c.resolveOrgID(ctx, cr)
 	if err != nil {
-		c.logger.Debug("Failed to resolve organization id", "error", err)
+		c.logger.Info("Failed to resolve organization id", "error", err)
+		cr.SetConditions(xpv1.Unavailable().WithMessage(err.Error()))
 		return managed.ExternalObservation{
 			ResourceExists:   true,
 			ResourceUpToDate: false,
@@ -362,8 +363,13 @@ func (c *external) syncGrafanaOrgMapping(ctx context.Context, cr *v1alpha1.Tenan
 		}
 		orgID, err := c.resolveOrgID(ctx, t)
 		if err != nil {
-			c.logger.Debug("Skipping tenant with unresolved org id", "tenant", t.GetName(), "error", err)
-			continue
+			if last := t.Status.AtProvider.OrgID; last != "" {
+				c.logger.Info("Using last known org id for tenant", "tenant", t.GetName(), "error", err)
+				orgID = last
+			} else {
+				c.logger.Info("Skipping tenant with unresolved org id", "tenant", t.GetName(), "error", err)
+				continue
+			}
 		}
 		mappings = append(mappings, grafana.TenantMapping{
 			OrgID:        orgID,
